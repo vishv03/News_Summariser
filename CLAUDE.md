@@ -45,6 +45,7 @@ If you rename or move one of these files, update this section in the same change
 
 ## Needs my approval before any change
 - `config/sources.yaml` (outlets and baseline leans) and everything in `prompts/`.
+  Never rename a source `id`; history and dedupe are keyed on it. Change only its `url`.
 - Adding any Python package, including dev tools: say why it's needed and what the alternatives are.
 - AI models, the spend cap, schedules, and anything in `.github/workflows/`.
 

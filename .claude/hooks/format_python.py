@@ -24,6 +24,10 @@ def main() -> None:
     file_path = payload.get("tool_input", {}).get("file_path", "")
     if not file_path.endswith(".py"):
         return
+    # Only format files inside this project, so ruff uses the project's settings.
+    project = os.path.normcase(os.getcwd()) + os.sep
+    if not os.path.normcase(os.path.abspath(file_path)).startswith(project):
+        return
     uv = find_uv()
     if uv is None:
         print("format hook: uv not found, skipped ruff", file=sys.stderr)

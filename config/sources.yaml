@@ -1,0 +1,513 @@
+# News sources. DRAFT — reviewed by the owner before use.
+#
+# Fields
+#   id               short unique key. NEVER rename: history and dedupe are keyed on it.
+#   name             display name
+#   url              RSS/Atom feed URL
+#   region           us | europe | south_asia | middle_east | africa | east_asia | latam
+#                    (by the audience covered: RT sits in europe; El País América in latam)
+#   country          ISO 3166 alpha-2 of the outlet's home base
+#   language         ISO 639-1 (non-English is translated by the AI)
+#   lean_axis        us       -> US left/right spectrum
+#                    uk       -> UK left/right spectrum
+#                    national -> that country's own left/right spectrum (not comparable across
+#                                countries: Spain's centre-left is not Brazil's)
+#                    local    -> stance toward that country's government (see the note)
+#   baseline_lean    -2..+2
+#                    us/uk/national: -2 left, -1 centre-left, 0 centre, +1 centre-right, +2 right
+#                    local:          -2 strongly critical of government .. +2 strongly pro-government
+#   ownership        private        -> commercial or non-profit, no state control
+#                    public_service -> state-owned or publicly funded, WITH legal editorial
+#                                      independence (BBC, Yonhap)
+#                    state          -> state-owned or state-funded WITHOUT legal editorial
+#                                      independence; shown as 🏛 in messages
+#   gov_aligned      true only with documented ownership or legal control that ties the outlet
+#                    to its government's line, even when privately owned. Never set for
+#                    editorial sympathy alone.
+#   reliability_note only where Media Bias/Fact Check rates factual reporting Mixed or lower,
+#                    whatever the outlet's lean. Passed to the AI judge.
+#   note             why this baseline, and what the AI judge should know
+#
+# How baselines were set
+#   us / uk:  guided by AllSides, Ad Fontes Media and Media Bias/Fact Check.
+#   national: guided by MBFC where rated, and by the outlet's reputation in its own country.
+#   local:    editorial judgments by the project owner. No public rating covers stance toward a
+#             government, so these are not externally validated.
+# The AI judge scores each article against this baseline (ADR 0002).
+
+sources:
+  # ── United States ────────────────────────────────────────────────────────
+  - id: huffpost
+    name: HuffPost
+    url: https://www.huffpost.com/section/world-news/feed
+    region: us
+    country: US
+    language: en
+    lean_axis: us
+    baseline_lean: -2
+    ownership: private
+    gov_aligned: false
+    note: Rated left by AllSides; strong progressive framing.
+
+  - id: nyt
+    name: The New York Times
+    url: https://rss.nytimes.com/services/xml/rss/nyt/World.xml
+    region: us
+    country: US
+    language: en
+    lean_axis: us
+    baseline_lean: -1
+    ownership: private
+    gov_aligned: false
+    note: News pages centre-left; paywalled, so the RSS summary is often all we get.
+
+  - id: npr
+    name: NPR
+    url: https://feeds.npr.org/1001/rss.xml
+    region: us
+    country: US
+    language: en
+    lean_axis: us
+    baseline_lean: -1
+    ownership: private
+    gov_aligned: false
+    note: Non-profit public radio network; ratings have moved between centre and lean-left.
+
+  - id: thehill
+    name: The Hill
+    url: https://thehill.com/feed/
+    region: us
+    country: US
+    language: en
+    lean_axis: us
+    baseline_lean: 0
+    ownership: private
+    gov_aligned: false
+    note: Politics-focused; generally rated centre.
+
+  - id: nypost
+    name: New York Post
+    url: https://nypost.com/feed/
+    region: us
+    country: US
+    language: en
+    lean_axis: us
+    baseline_lean: 1
+    ownership: private
+    gov_aligned: false
+    reliability_note: MBFC rates factual reporting Mixed.
+    note: Rated lean-right by AllSides. Replaced WSJ, whose public feed stopped updating in early 2025.
+
+  - id: foxnews
+    name: Fox News
+    url: https://moxie.foxnews.com/google-publisher/latest.xml
+    region: us
+    country: US
+    language: en
+    lean_axis: us
+    baseline_lean: 1
+    ownership: private
+    gov_aligned: false
+    reliability_note: MBFC rates factual reporting Low and lists it as a Questionable Source.
+    note: This is the online news feed, which AllSides rates lean-right; Fox's TV opinion shows are rated right.
+
+  # ── Europe ───────────────────────────────────────────────────────────────
+  - id: guardian
+    name: The Guardian
+    url: https://www.theguardian.com/world/rss
+    region: europe
+    country: GB
+    language: en
+    lean_axis: uk
+    baseline_lean: -1
+    ownership: private
+    gov_aligned: false
+    note: UK centre-left; free full text.
+
+  - id: bbc
+    name: BBC News
+    url: https://feeds.bbci.co.uk/news/world/rss.xml
+    region: europe
+    country: GB
+    language: en
+    lean_axis: uk
+    baseline_lean: 0
+    ownership: public_service
+    gov_aligned: false
+    note: Funded by the licence fee, with a legal duty of impartiality.
+
+  - id: telegraph
+    name: The Telegraph
+    url: https://www.telegraph.co.uk/rss.xml
+    region: europe
+    country: GB
+    language: en
+    lean_axis: uk
+    baseline_lean: 1
+    ownership: private
+    gov_aligned: false
+    reliability_note: MBFC rates factual reporting Mixed.
+    note: UK centre-right; partly paywalled.
+
+  - id: dailymail
+    name: Daily Mail
+    url: https://www.dailymail.co.uk/news/index.rss
+    region: europe
+    country: GB
+    language: en
+    lean_axis: uk
+    baseline_lean: 2
+    ownership: private
+    gov_aligned: false
+    note: UK right-leaning tabloid with one of the largest online audiences.
+
+  - id: lemonde
+    name: Le Monde
+    url: https://www.lemonde.fr/rss/une.xml
+    region: europe
+    country: FR
+    language: fr
+    lean_axis: national
+    baseline_lean: -1
+    ownership: private
+    gov_aligned: false
+    note: France's main centre-left paper of record.
+
+  - id: lefigaro
+    name: Le Figaro
+    url: https://www.lefigaro.fr/rss/figaro_actualites.xml
+    region: europe
+    country: FR
+    language: fr
+    lean_axis: national
+    baseline_lean: 1
+    ownership: private
+    gov_aligned: false
+    note: France's main centre-right daily.
+
+  - id: spiegel
+    name: Der Spiegel
+    url: https://www.spiegel.de/schlagzeilen/index.rss
+    region: europe
+    country: DE
+    language: de
+    lean_axis: national
+    baseline_lean: -1
+    ownership: private
+    gov_aligned: false
+    note: German centre-left news magazine.
+
+  - id: rt
+    name: RT
+    url: https://www.rt.com/rss/news/
+    region: europe
+    country: RU
+    language: en
+    lean_axis: local
+    baseline_lean: 2
+    ownership: state
+    gov_aligned: true
+    reliability_note: MBFC rates factual reporting Very Low and lists it as a Questionable Source.
+    note: Russian state broadcaster; strongly pro-Kremlin. Banned in the EU and UK; included to show the Russian government's framing.
+
+  # ── South Asia ───────────────────────────────────────────────────────────
+  # India: lean_axis local = stance toward the BJP-led central government.
+  - id: scroll
+    name: Scroll.in
+    url: https://feeds.feedburner.com/ScrollinArticles.rss
+    region: south_asia
+    country: IN
+    language: en
+    lean_axis: local
+    baseline_lean: -1
+    ownership: private
+    gov_aligned: false
+    note: Digital outlet; frequently critical of the BJP government. Replaced The Wire, which has no working feed.
+
+  - id: thehindu
+    name: The Hindu
+    url: https://www.thehindu.com/news/national/feeder/default.rss
+    region: south_asia
+    country: IN
+    language: en
+    lean_axis: local
+    baseline_lean: -1
+    ownership: private
+    gov_aligned: false
+    note: Established broadsheet; centre-left, often critical of government policy.
+
+  - id: indianexpress
+    name: The Indian Express
+    url: https://indianexpress.com/feed/
+    region: south_asia
+    country: IN
+    language: en
+    lean_axis: local
+    baseline_lean: -1
+    ownership: private
+    gov_aligned: false
+    reliability_note: MBFC rates factual reporting Mixed.
+    note: Known for investigative reporting that is often critical of the government.
+
+  - id: bhaskar
+    name: Dainik Bhaskar
+    url: https://www.bhaskar.com/rss-v1--category-1061.xml
+    region: south_asia
+    country: IN
+    language: hi
+    lean_axis: local
+    baseline_lean: 0
+    ownership: private
+    gov_aligned: false
+    note: India's largest Hindi daily by circulation; mainstream, mixes critical reporting with mild coverage. Not rated by MBFC.
+
+  - id: toi
+    name: The Times of India
+    url: https://timesofindia.indiatimes.com/rssfeedstopstories.cms
+    region: south_asia
+    country: IN
+    language: en
+    lean_axis: local
+    baseline_lean: 1
+    ownership: private
+    gov_aligned: false
+    reliability_note: MBFC rates factual reporting Mixed.
+    note: Largest English daily; generally mild toward the government.
+
+  - id: opindia
+    name: OpIndia
+    url: https://www.opindia.com/feed/
+    region: south_asia
+    country: IN
+    language: en
+    lean_axis: local
+    baseline_lean: 2
+    ownership: private
+    gov_aligned: false
+    reliability_note: MBFC rates factual reporting Mixed.
+    note: Right-wing digital outlet; strongly pro-government.
+
+  - id: tribune_pk
+    name: The Express Tribune
+    url: https://tribune.com.pk/feed/home
+    region: south_asia
+    country: PK
+    language: en
+    lean_axis: local
+    baseline_lean: 0
+    ownership: private
+    gov_aligned: false
+    note: Major Pakistani English daily, broadly liberal-centrist. Replaced Dawn, which blocks automated requests.
+
+  # ── Middle East ──────────────────────────────────────────────────────────
+  - id: aljazeera
+    name: Al Jazeera English
+    url: https://www.aljazeera.com/xml/rss/all.xml
+    region: middle_east
+    country: QA
+    language: en
+    lean_axis: local
+    baseline_lean: 1
+    ownership: state
+    gov_aligned: true
+    reliability_note: MBFC rates factual reporting Mixed.
+    note: Funded by the Qatari state; rarely critical of Qatar, critical of many regional rivals.
+
+  - id: saudigazette
+    name: Saudi Gazette
+    url: https://www.saudigazette.com.sa/rssFeed/74
+    region: middle_east
+    country: SA
+    language: en
+    lean_axis: local
+    baseline_lean: 2
+    ownership: private
+    gov_aligned: true
+    reliability_note: MBFC rates factual reporting Mixed.
+    note: Privately owned Saudi English daily that follows government positions. Replaced Al Arabiya and Arab News, which block automated requests.
+
+  - id: alquds
+    name: Al-Quds Al-Arabi
+    url: https://www.alquds.co.uk/feed/
+    region: middle_east
+    country: GB
+    language: ar
+    lean_axis: local
+    baseline_lean: -1
+    ownership: private
+    gov_aligned: false
+    note: London-based pan-Arab daily; lean is measured against Arab governments generally, which it often criticises. Funding is reported to be Qatar-linked; gov_aligned stays false because that is unverified. Not rated by MBFC.
+
+  - id: haaretz
+    name: Haaretz
+    url: https://www.haaretz.com/srv/haaretz-latest-headlines
+    region: middle_east
+    country: IL
+    language: en
+    lean_axis: local
+    baseline_lean: -2
+    ownership: private
+    gov_aligned: false
+    note: Israeli left-liberal daily; strongly critical of the current government. Paywalled.
+
+  - id: jpost
+    name: The Jerusalem Post
+    url: https://www.jpost.com/rss/rssfeedsfrontpage.aspx
+    region: middle_east
+    country: IL
+    language: en
+    lean_axis: local
+    baseline_lean: 1
+    ownership: private
+    gov_aligned: false
+    note: Israeli daily; mostly supportive of the current government. Replaced The Times of Israel, which blocks automated requests.
+
+  # ── Africa ───────────────────────────────────────────────────────────────
+  - id: africanews
+    name: Africanews
+    url: https://www.africanews.com/feed/rss
+    region: africa
+    country: CG
+    language: en
+    lean_axis: local
+    baseline_lean: 0
+    ownership: private
+    gov_aligned: false
+    note: Pan-African channel (Euronews group), based in Congo-Brazzaville; covers the whole continent, so its lean is not about one government. Mostly neutral wire style. Replaced Daily Maverick, which blocks automated requests.
+
+  - id: premiumtimes
+    name: Premium Times
+    url: https://www.premiumtimesng.com/feed
+    region: africa
+    country: NG
+    language: en
+    lean_axis: local
+    baseline_lean: -1
+    ownership: private
+    gov_aligned: false
+    note: Nigerian investigative paper; often critical of government.
+
+  - id: nation_ke
+    name: Daily Nation
+    url: https://nation.africa/kenya/rss.xml
+    region: africa
+    country: KE
+    language: en
+    lean_axis: local
+    baseline_lean: 0
+    ownership: private
+    gov_aligned: false
+    reliability_note: MBFC rates factual reporting Mixed.
+    note: Kenya's largest daily (Nation Media Group); mainstream, mixes critical and neutral coverage of government.
+
+  - id: jeuneafrique
+    name: Jeune Afrique
+    url: https://www.jeuneafrique.com/feed/
+    region: africa
+    country: FR
+    language: fr
+    lean_axis: local
+    baseline_lean: 0
+    ownership: private
+    gov_aligned: false
+    note: Paris-based pan-African news magazine covering French-speaking Africa; lean is not about one government.
+
+  # ── East Asia ────────────────────────────────────────────────────────────
+  - id: scmp
+    name: South China Morning Post
+    url: https://www.scmp.com/rss/91/feed
+    region: east_asia
+    country: HK
+    language: en
+    lean_axis: local
+    baseline_lean: 1
+    ownership: private
+    gov_aligned: false
+    reliability_note: MBFC rates factual reporting Mixed.
+    note: Hong Kong daily owned by Alibaba; generally careful toward Beijing. gov_aligned is false because there is no documented state control of its editorial line.
+
+  - id: globaltimes
+    name: Global Times
+    url: https://www.globaltimes.cn/rss/outbrain.xml
+    region: east_asia
+    country: CN
+    language: en
+    lean_axis: local
+    baseline_lean: 2
+    ownership: state
+    gov_aligned: true
+    reliability_note: MBFC rates factual reporting Mixed and lists it as a Questionable Source.
+    note: Run by the Chinese Communist Party's People's Daily; shows the official Beijing line.
+
+  - id: asahi
+    name: Asahi Shimbun
+    url: https://www.asahi.com/rss/asahi/newsheadlines.rdf
+    region: east_asia
+    country: JP
+    language: ja
+    lean_axis: local
+    baseline_lean: -1
+    ownership: private
+    gov_aligned: false
+    note: Major Japanese daily; often critical of the LDP-led government.
+
+  - id: yonhap
+    name: Yonhap News Agency
+    url: https://en.yna.co.kr/RSS/news.xml
+    region: east_asia
+    country: KR
+    language: en
+    lean_axis: local
+    baseline_lean: 0
+    ownership: public_service
+    gov_aligned: false
+    note: South Korea's national news agency; government-owned (the government appoints its board), with editorial independence set in law. Mostly factual wire copy.
+
+  # ── Latin America ────────────────────────────────────────────────────────
+  - id: folha
+    name: Folha de S.Paulo
+    url: https://feeds.folha.uol.com.br/emcimadahora/rss091.xml
+    region: latam
+    country: BR
+    language: pt
+    lean_axis: national
+    baseline_lean: -1
+    ownership: private
+    gov_aligned: false
+    note: Brazil's largest daily; centre-left on Brazil's own spectrum. Paywalled.
+
+  - id: lanacion
+    name: La Nación
+    url: https://www.lanacion.com.ar/arc/outboundfeeds/rss/?outputType=xml
+    region: latam
+    country: AR
+    language: es
+    lean_axis: national
+    baseline_lean: 1
+    ownership: private
+    gov_aligned: false
+    note: Argentine centre-right daily of record. Replaced Clarín, which blocks automated requests.
+
+  - id: lajornada
+    name: La Jornada
+    url: https://www.jornada.com.mx/rss/edicion.xml
+    region: latam
+    country: MX
+    language: es
+    lean_axis: local
+    baseline_lean: 1
+    ownership: private
+    gov_aligned: false
+    note: Major Mexican daily; generally supportive of the Morena-led government (it is itself left-wing, so +1 here means pro-government, not right).
+
+  - id: elpais_america
+    name: El País América
+    url: https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/america/portada
+    region: latam
+    country: ES
+    language: es
+    lean_axis: national
+    baseline_lean: -1
+    ownership: private
+    gov_aligned: false
+    note: Spanish centre-left paper (scored on Spain's spectrum); its América edition covers Latin America widely.
