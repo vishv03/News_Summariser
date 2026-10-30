@@ -20,7 +20,8 @@ It is also a public portfolio project: code, decisions and history should be eas
 - Test: `uv run pytest -q`
 - Lint and format: `uv run ruff check . --fix` and `uv run ruff format .`
 - Type check: `uv run pyright`
-- Preview the digest without posting: `uv run python -m newsagg digest --dry-run`
+- Preview the digest without posting: `uv run python -m news_summariser digest --dry-run`
+- Commit hooks (ruff, pyright, pytest) are set up in `.pre-commit-config.yaml`.
 
 ## Definition of done
 A task is done only when tests pass, ruff and pyright are clean, and, for any change to the
@@ -35,8 +36,8 @@ likely cause in plain words, suggest a fix, and wait for me. Don't try fixes on 
 
 ## Ownership: I write these, Claude never edits them
 The core logic is mine. This covers the modules that do it, whatever they're named:
-- Story clustering: grouping articles into stories (currently `src/newsagg/cluster.py`)
-- Story selection: ranking, topic rotation, blindspot rules (currently `src/newsagg/select.py`)
+- Story clustering: grouping articles into stories (currently `src/news_summariser/cluster.py`)
+- Story selection: ranking, topic rotation, blindspot rules (currently `src/news_summariser/select.py`)
 - The lean-judging rubric (currently `prompts/judge.md`)
 
 For bugs or improvements in these, show me a diff in chat with the reason. I apply it myself.
