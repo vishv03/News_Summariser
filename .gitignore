@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Local model cache
+.cache/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Personal Claude Code settings (shared ones in .claude/settings.json ARE committed)
+.claude/settings.local.json
