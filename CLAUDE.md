@@ -13,7 +13,8 @@ It is also a public portfolio project: code, decisions and history should be eas
   for the daily framing write-up. The bot calls the Anthropic API directly, not Claude Code.
 - Delivery: python-telegram-bot, send-only, group with Topics, URL buttons.
 - State: SQLite at `data/state.db`, committed back by the workflow.
-- Full plan and reasoning: `docs/adr/`.
+- Design overview, selection rules and build order: `docs/architecture.md`. Reasoning: `docs/adr/`.
+  Keep `docs/architecture.md` up to date when a design decision changes.
 
 ## Commands
 - Install: `uv sync`
