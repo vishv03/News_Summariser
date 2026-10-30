@@ -37,6 +37,9 @@ v2 adds an always-on, Dockerised bot on a cloud server paid for by GitHub Studen
 ## Consequences
 - Secrets live in GitHub Secrets; logs must never print them, because Actions logs are public.
 - Two workflows writing `state.db` could clash, so they must not run at the same time (Actions `concurrency` group).
+- Posting must be idempotent, because GitHub can re-run a job. Before sending anything, the digest
+  commits a "started" record for the day, then marks each message as sent. A retry posts only what's
+  missing, and skips completely if the day is marked "done".
 - The state file grows; old rows need pruning, e.g. after 30 days.
 - When student credits expire (usually after 12 months), v2 moves to the Oracle free VM or falls back to Actions-only.
 

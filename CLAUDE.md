@@ -55,6 +55,14 @@ If you rename or move one of these files, update this section in the same change
 - Run `/code-review` before I open a PR. I review and merge every PR.
 - Write an ADR in `docs/adr/` (numbered `NNNN-title.md`) before changing a dependency, a data format
   or the database schema, an AI model, hosting, or the lean rubric. Not for routine features or fixes.
+  Use `/adr` to create one.
+
+## Claude Code tooling
+- Hooks (`.claude/settings.json`): `git commit`/`git push` are blocked; `uv add` and `pip install`
+  ask me first; every Python file Claude edits is run through ruff.
+- Before committing changes to `prompts/` or `config/sources.yaml`, run the `bias-auditor` agent.
+- When feeds look quiet or before adding sources, run the `source-curator` agent.
+- Both agents are read-only; their findings come to me to decide.
 
 ## How Claude works with me
 - I'm the lead engineer. Before every design choice, give me 2–3 options with pros and cons, a
