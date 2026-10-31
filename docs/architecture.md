@@ -173,7 +173,9 @@ Messages use HTML formatting and stay under Telegram's 4,096-character limit.
   from a price table in `config/settings.yaml`.
 - Before a run's first paid call, month-to-date spend plus an estimate of the run (the most
   expensive day of the last 7, or $0.25 with no history) is checked against the cap. If it would
-  pass, the whole digest is headline-only and a warning is logged.
+  pass, the whole digest is headline-only and a warning is logged. Months and days are UTC.
+- `--dry-run` uses canned AI output and costs nothing. `--dry-run --live` makes real, logged calls
+  but posts nothing.
 - A hard spend limit is also set in the Anthropic console as a second safety net.
 - Prices are taken from the official docs, never guessed.
 

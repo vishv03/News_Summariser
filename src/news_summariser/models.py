@@ -55,6 +55,33 @@ class Story(BaseModel):
         return max(a.published_at for a in self.articles)
 
 
+SpendPurpose = Literal["judge", "summary", "breaking"]
+
+
+class TokenUsage(BaseModel):
+    """Token counts for one API call, as billed."""
+
+    model_config = ConfigDict(frozen=True)
+
+    input_tokens: int = Field(ge=0)
+    # Includes thinking tokens: they're billed as output.
+    output_tokens: int = Field(ge=0)
+    cache_write_tokens: int = Field(default=0, ge=0)
+    cache_read_tokens: int = Field(default=0, ge=0)
+
+
+class SpendRecord(BaseModel):
+    """One paid API call, as stored in state.db (ADR 0008)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    at: datetime
+    model: str
+    purpose: SpendPurpose
+    usage: TokenUsage
+    cost_usd: float = Field(ge=0)
+
+
 Topic = Literal["world_politics", "economy", "science_tech_climate", "culture_society"]
 # top: one of the top 5. one_sided: a blindspot covered mostly by Left or Right.
 # non_western: a blindspot covered only by outlets outside the us and europe regions.

@@ -3,14 +3,14 @@
 import sqlite3
 from collections.abc import Iterable
 from contextlib import closing
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from importlib import resources
 from pathlib import Path
 from typing import Literal
 
 import numpy as np
 
-from news_summariser.models import Article, FeedHealth, PostedStory
+from news_summariser.models import Article, FeedHealth, PostedStory, SpendRecord
 
 STATE_PATH = Path("data/state.db")
 CACHE_PATH = Path("data/cache.db")
@@ -21,6 +21,8 @@ SEEN_URL_RETENTION = timedelta(days=30)
 ARTICLE_RETENTION = timedelta(hours=48)
 # A story quiet this long that comes back is treated as new (ADR 0007).
 POSTED_STORY_RETENTION = timedelta(days=30)
+# Long enough for the 7-day estimate and to audit last month against the bill.
+SPEND_RETENTION = timedelta(days=30)
 
 Kind = Literal["state", "cache"]
 
@@ -202,8 +204,43 @@ def posted_stories(conn: sqlite3.Connection) -> list[PostedStory]:
     ]
 
 
+def add_spend(conn: sqlite3.Connection, record: SpendRecord) -> None:
+    """Record one paid API call."""
+    u = record.usage
+    conn.execute(
+        "INSERT INTO spend (at, model, purpose, input_tokens, output_tokens, cache_write_tokens,"
+        " cache_read_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            _iso(record.at),
+            record.model,
+            record.purpose,
+            u.input_tokens,
+            u.output_tokens,
+            u.cache_write_tokens,
+            u.cache_read_tokens,
+            record.cost_usd,
+        ),
+    )
+
+
+def spend_since(conn: sqlite3.Connection, since: datetime) -> float:
+    """Return total USD spent at or after `since`."""
+    row = conn.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM spend WHERE at >= ?", (_iso(since),))
+    return row.fetchone()[0]
+
+
+def daily_spend(conn: sqlite3.Connection, since: datetime, until: datetime) -> dict[date, float]:
+    """Return USD spent per UTC day in [since, until); days with no spend are left out."""
+    # Stored times are all UTC (see _iso), so the first 10 characters are the UTC date.
+    rows = conn.execute(
+        "SELECT substr(at, 1, 10), SUM(cost_usd) FROM spend WHERE at >= ? AND at < ? GROUP BY 1",
+        (_iso(since), _iso(until)),
+    )
+    return {date.fromisoformat(day): total for day, total in rows}
+
+
 def prune(state: sqlite3.Connection, cache: sqlite3.Connection, now: datetime) -> None:
-    """Delete old seen URLs and quiet posted stories (30 days), and cached articles (48 hours)."""
+    """Delete old seen URLs, quiet posted stories and old spend rows, and cached articles."""
     state.execute(
         "DELETE FROM seen_urls WHERE first_seen_at < ?", (_iso(now - SEEN_URL_RETENTION),)
     )
@@ -212,6 +249,12 @@ def prune(state: sqlite3.Connection, cache: sqlite3.Connection, now: datetime) -
     state.execute(
         "DELETE FROM posted_stories WHERE last_linked_at < ?",
         (_iso(now - POSTED_STORY_RETENTION),),
+    )
+    # Never before the start of this UTC month: the cap is a monthly sum, so pruning on the 31st
+    # mustn't drop the 1st (ADR 0008).
+    month_start = now.astimezone(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    state.execute(
+        "DELETE FROM spend WHERE at < ?", (_iso(min(month_start, now - SPEND_RETENTION)),)
     )
     cache.execute("DELETE FROM articles WHERE published_at < ?", (_iso(now - ARTICLE_RETENTION),))
     # Keyed to articles rather than by age, so a vector never outlives the text it came from.

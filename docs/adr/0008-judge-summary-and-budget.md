@@ -103,6 +103,18 @@ or all of the cap on its own.
 - *Before each call:* uses the budget to the last cent, but gives a partial digest.
 - *Start of run only:* simplest, but the day that crosses the cap can overshoot by a full day.
 
+### Paid calls during `--dry-run`
+- **Free by default, real with `--live` (chosen):** `--dry-run` uses canned judge and summary output,
+  so routine checks after every pipeline change cost nothing. `--dry-run --live` makes real calls and
+  logs them to `spend`, but still posts nothing.
+- *Always real, and logged:* tests the real prompts every time, but costs ~$0.10–0.15 per run.
+- *Real, not logged:* the cap would undercount real spend from the same API key.
+
+### Which clock defines the month and the day
+- **UTC (chosen):** every time in `state.db` is already UTC (ADR 0005), and the month should line
+  up with the bill. The 07:00 IST digest runs inside one UTC day.
+- *IST:* matches readers' calendars, but the month boundary is 5.5 hours away from UTC's.
+
 ### API client
 - **The official `anthropic` SDK (chosen):** built-in retries for 429/5xx, typed errors, `usage`
   for the spend log, and `messages.parse()` to validate structured output into pydantic models.
