@@ -1,9 +1,10 @@
 """Data passed between modules."""
 
+import re
 from datetime import datetime, timedelta
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # An Issue opens only after this many unhealthy runs in a row AND this long unhealthy (ADR 0005).
 # Runs are every 20 minutes, so 3 runs alone would be one hour: too twitchy for short outages.
@@ -178,3 +179,78 @@ class FeedHealth(BaseModel):
             and self.unhealthy_since is not None
             and self.last_checked_at - self.unhealthy_since >= UNHEALTHY_FOR_ISSUE
         )
+
+
+# The fixed list in prompts/judge.md (ADR 0008), or "other:<word>" for anything else.
+FRAMING_TAG_PATTERN = (
+    r"^(conflict|human_cost|economic|security|responsibility|morality|legal|political_strategy"
+    r"|sovereignty|evidence|other:[a-z]+)$"
+)
+
+
+class LoadedWord(BaseModel):
+    """A word or phrase the judge found loaded, with a neutral alternative."""
+
+    model_config = ConfigDict(frozen=True)
+
+    quote: str = Field(description="The exact words, in the article's original language.")
+    neutral: str = Field(description="A neutral alternative, in English.")
+    gloss: str | None = Field(
+        default=None, description="English translation of the quote; only for non-English text."
+    )
+
+
+class ArticleJudgment(BaseModel):
+    """The judge's verdict on one article, following prompts/judge.md."""
+
+    model_config = ConfigDict(frozen=True)
+
+    article_id: str
+    # Text, not a number: a JSON schema enum can't mix numbers with "insufficient".
+    lean: Literal["-2", "-1", "0", "+1", "+2", "insufficient"]
+    reason: str | None = Field(
+        default=None, description="Required for every score; null when lean is insufficient."
+    )
+    confidence: Literal["low", "medium", "high"] | None = Field(
+        default=None, description="Required for every score; null when lean is insufficient."
+    )
+    framing_tags: list[str] = Field(min_length=1, max_length=3)
+    loaded_words: list[LoadedWord] = Field(max_length=3)
+    take: str
+
+    @model_validator(mode="after")
+    def _check_rubric(self) -> "ArticleJudgment":
+        # These rules can't be written as one JSON schema, so pydantic checks them; a reply that
+        # breaks them counts as bad and is retried once.
+        scored = self.lean != "insufficient"
+        if scored and (self.reason is None or self.confidence is None):
+            raise ValueError("a score needs a reason and a confidence")
+        if not scored and self.confidence is not None:
+            raise ValueError("insufficient has no confidence")
+        bad_tags = [t for t in self.framing_tags if not re.match(FRAMING_TAG_PATTERN, t)]
+        if bad_tags:
+            raise ValueError(f"unknown framing tags: {bad_tags}")
+        return self
+
+    @property
+    def score(self) -> int | None:
+        """The lean as a number, or None when insufficient."""
+        return None if self.lean == "insufficient" else int(self.lean)
+
+
+class JudgeReply(BaseModel):
+    """What the judge returns for one story: one entry per article."""
+
+    judgments: list[ArticleJudgment]
+
+
+class JudgedStory(BaseModel):
+    """A story's judgments, keyed by article url_hash."""
+
+    model_config = ConfigDict(frozen=True)
+
+    story_id: str
+    judgments: dict[str, ArticleJudgment]
+    # Articles the judge failed on, even after a retry: the digest shows their outlet's baseline,
+    # labelled as such. When every article is here, the story is headline-only.
+    not_judged: frozenset[str] = frozenset()
