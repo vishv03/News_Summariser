@@ -211,7 +211,7 @@ sources:
     ownership: state
     gov_aligned: true
     reliability_note: MBFC rates factual reporting Very Low and lists it as a Questionable Source.
-    note: Russian state broadcaster; strongly pro-Kremlin. Banned in the EU and UK; included to show the Russian government's framing.
+    note: Russian state broadcaster; shows the official Kremlin line. Banned in the EU and UK; included to show the Russian government's framing.
 
   # ── South Asia ───────────────────────────────────────────────────────────
   # India: lean_axis local = stance toward the BJP-led central government.
@@ -314,7 +314,7 @@ sources:
     ownership: state
     gov_aligned: true
     reliability_note: MBFC rates factual reporting Mixed.
-    note: Funded by the Qatari state; rarely critical of Qatar, critical of many regional rivals.
+    note: Funded by the Qatari state; rarely critical of the Qatari government.
 
   - id: saudigazette
     name: Saudi Gazette
