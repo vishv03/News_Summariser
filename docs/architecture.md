@@ -58,7 +58,7 @@ reporting Mixed or lower, whatever the lean. Full field definitions are in the f
 Feeds are always fetched with an honest User-Agent naming the project. Several sites blocked a
 browser-like one but accepted the honest one.
 
-## Feed health *(planned, ADR 0005 with ingest)*
+## Feed health *(planned, [ADR 0005](adr/0005-ingest-store-and-feed-health.md))*
 - Everything is keyed by source `id`, which is never renamed; changing a feed URL keeps history.
 - Article URLs are cleaned up before dedupe (tracking parameters removed, host lowercased,
   fragment dropped), so a new feed URL can't cause duplicate posts.
@@ -120,8 +120,7 @@ Messages use HTML formatting and stay under Telegram's 4,096-character limit.
 - Prices are taken from the official docs, never guessed.
 
 ## Build order
-0. ✅ Setup: uv scaffold, CLAUDE.md, ADRs 0001–0004, hooks, subagents, `/adr`
-1. ✅ Sources: `config/sources.yaml`
+0. ✅ Setup: uv scaffold, CLAUDE.md, ADRs 0001–0004, hooks, subagents, `/adr`1. ✅ Sources: `config/sources.yaml`
 2. Ingest + store + feed health (ADR 0005)
 3. Cluster *(owner-written)*
 4. Select *(owner-written)*
