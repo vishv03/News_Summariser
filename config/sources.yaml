@@ -26,7 +26,8 @@
 #                    editorial sympathy alone.
 #   reliability_note only where Media Bias/Fact Check rates factual reporting Mixed or lower,
 #                    whatever the outlet's lean. Passed to the AI judge.
-#   note             why this baseline, and what the AI judge should know
+#   note             why this baseline, for people reading this file. Not sent to the AI judge:
+#                    characterisations here would anchor it on reputation (ADR 0008).
 #   enabled          optional, default true. false stops fetching but keeps the entry and its
 #                    history (keyed on id). Add a comment saying why and when.
 #
@@ -457,7 +458,7 @@ sources:
     reliability_note: MBFC rates factual reporting Mixed and lists it as a Questionable Source.
     note: >-
       International arm of state broadcaster CCTV, funded by the Chinese government; shows the
-      official Beijing line, in a more measured tone than Global Times. China section feed.
+      official Beijing line. China section feed.
 
   - id: asahi
     name: Asahi Shimbun

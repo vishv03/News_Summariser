@@ -138,6 +138,12 @@ or all of the cap on its own.
   calls or breaking alerts), via a `dev` flag on each spend row. All spend still counts toward the
   monthly cap.
 
+### What the judge sees about each outlet (decided 2026-10-31)
+- **Name, state-media flag, lean axis, baseline and `reliability_note` only (chosen):** the
+  free-text `note` in `sources.yaml` explains the baseline for people reading the file. Its
+  characterisations ("strongly pro-Kremlin") would anchor the judge on reputation.
+- *Also send `note`:* more context, but more anchoring, and every note would become rubric input.
+
 ### Paid calls during `--dry-run`
 - **Free by default, real with `--live` (chosen):** `--dry-run` uses canned judge and summary output,
   so routine checks after every pipeline change cost nothing. `--dry-run --live` makes real calls and
@@ -146,8 +152,10 @@ or all of the cap on its own.
 - *Real, not logged:* the cap would undercount real spend from the same API key.
 
 ### Which clock defines the month and the day
-- **UTC (chosen):** every time in `state.db` is already UTC (ADR 0005), and the month should line
-  up with the bill. The 07:00 IST digest runs inside one UTC day.
+- **UTC (chosen):** every time in `state.db` is already UTC (ADR 0005), and Anthropic's Usage &
+  Cost API buckets usage by UTC, so our numbers can be checked against it. The docs don't say which
+  time zone the console's monthly spend limit resets in (checked 2026-10-31). The 07:00 IST digest
+  runs inside one UTC day.
 - *IST:* matches readers' calendars, but the month boundary is 5.5 hours away from UTC's.
 
 ### API client

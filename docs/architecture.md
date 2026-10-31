@@ -4,7 +4,8 @@ A Telegram bot that posts a daily digest showing how left, right and internation
 the same news story, plus conservative breaking-news alerts. Each choice below links to the ADR
 (Architecture Decision Record) that explains why.
 
-> **Status:** design approved, sources done. Code is being built module by module (see
+> **Status:** steps 0–5 are built: ingest, clustering, selection, judging, the write-up and the
+> budget. Rendering, Telegram sending and the scheduled workflow come next (see
 > [Build order](#build-order)). Sections marked *(planned)* aren't built yet.
 
 ## Pipeline
@@ -69,14 +70,14 @@ gone stale, and CGTN took its place.
 Feeds are always fetched with an honest User-Agent naming the project. Several sites blocked a
 browser-like one but accepted the honest one.
 
-## Feed health *(planned, [ADR 0005](adr/0005-ingest-store-and-feed-health.md))*
+## Feed health *([ADR 0005](adr/0005-ingest-store-and-feed-health.md))*
 - Everything is keyed by source `id`, which is never renamed; changing a feed URL keeps history.
 - Article URLs are cleaned up before dedupe (tracking parameters removed, host lowercased,
   fragment dropped), so a new feed URL can't cause duplicate posts.
 - Each run records per-source health: last success, newest item date, consecutive failures.
   **Unhealthy** = an error, 0 items, or nothing new in 48 hours. That catches the silent failures:
   a URL that now returns a web page, or a feed that has stopped updating.
-- After 3 unhealthy runs in a row, the workflow opens a GitHub Issue for that feed and closes it
+- *(Planned, step 6.)* After 3 unhealthy runs in a row, the workflow opens a GitHub Issue for that feed and closes it
   automatically when the feed recovers.
 - Redirects are followed and flagged in the issue. `sources.yaml` is never edited automatically.
 - If a story lacks a viewpoint because those feeds are down, the message says
@@ -94,7 +95,7 @@ browser-like one but accepted the honest one.
 - Each `Story` has a `story_id` (its earliest article's `url_hash`), its articles, and derived
   properties. Region and lean are looked up from `sources.yaml`, never copied.
 
-## Lean judging *(planned, [ADR 0008](adr/0008-judge-summary-and-budget.md))*
+## Lean judging *([ADR 0008](adr/0008-judge-summary-and-budget.md))*
 Haiku judges all articles in a story together, in one call, using a fixed rubric
 (`prompts/judge.md`). It sees each outlet's baseline and must explain any shift of ±1 or more.
 Output is structured JSON, checked with pydantic. Only articles in stories that make the digest
@@ -194,7 +195,7 @@ Messages use HTML formatting and stay under Telegram's 4,096-character limit.
 2. ✅ Ingest + store + feed health (ADR 0005)
 3. ✅ Cluster *(owner-decided)*
 4. ✅ Select *(owner-decided)*
-5. Judge + summarize + budget (rubric owner-decided)
+5. ✅ Judge + summarize + budget (rubric owner-decided)
 6. Render + Telegram + `digest.yml`: **v1 ships**
 7. GDELT + `breaking.yml`: **v1.1**
 8. Always-on bot on student cloud credits, with `/more`, `/topic`, `/sources`: **v2**
