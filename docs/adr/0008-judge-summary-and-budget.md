@@ -103,6 +103,27 @@ or all of the cap on its own.
 - *Before each call:* uses the budget to the last cent, but gives a partial digest.
 - *Start of run only:* simplest, but the day that crosses the cap can overshoot by a full day.
 
+### Where the story's facts come from
+- **The judge writes a 2–3 sentence neutral fact line per story (chosen):** Sonnet still reads only
+  judge output. About 100 Haiku output tokens per story.
+- *Send Sonnet the article titles:* headlines are the most slanted part of an article.
+- *No fact summary:* readers would get framing with no plain account of what happened.
+
+### What Sonnet writes
+- **The headline, one line per side with coverage, and one "what differs" sentence (chosen):** the
+  facts come from the judge, and the loaded-language line is picked in code from the judge's flags.
+- *Everything, facts included:* more output, and a second paraphrase can drift from the judge.
+- *Side lines only:* no "what differs" sentence, the most useful comparison for readers.
+
+### When a call fails
+- **Judge:** a bad, refused, cut-off or incomplete reply is retried once, and the retry only fills
+  gaps. Articles still missing are "not judged" and show their baseline, labelled. If nothing came
+  back, the story is headline-only. *Rejected:* replacing the story with the next-ranked one
+  (changes selection), and failing the whole run.
+- **Sonnet:** retried once; then the story falls back to the judge's fact line and takes, with no
+  "what differs" sentence. *Rejected:* a headline-only story (wastes judging already paid for), and
+  failing the whole run.
+
 ### Paid calls during `--dry-run`
 - **Free by default, real with `--live` (chosen):** `--dry-run` uses canned judge and summary output,
   so routine checks after every pipeline change cost nothing. `--dry-run --live` makes real calls and

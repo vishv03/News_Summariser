@@ -239,8 +239,9 @@ class ArticleJudgment(BaseModel):
 
 
 class JudgeReply(BaseModel):
-    """What the judge returns for one story: one entry per article."""
+    """What the judge returns for one story: a neutral fact line and one entry per article."""
 
+    facts: str = Field(description="2-3 neutral sentences on what happened, in English.")
     judgments: list[ArticleJudgment]
 
 
@@ -250,7 +251,23 @@ class JudgedStory(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     story_id: str
+    # None when no judge reply came back at all; the story is then headline-only.
+    facts: str | None
     judgments: dict[str, ArticleJudgment]
     # Articles the judge failed on, even after a retry: the digest shows their outlet's baseline,
     # labelled as such. When every article is here, the story is headline-only.
     not_judged: frozenset[str] = frozenset()
+
+
+class StoryWriteup(BaseModel):
+    """Sonnet's comparison for one story, following prompts/summary.md."""
+
+    model_config = ConfigDict(frozen=True)
+
+    headline: str = Field(description="At most 12 words, neutral.")
+    left: str | None = Field(description="How left outlets framed it; null when none covered it.")
+    right: str | None = Field(description="How right outlets framed it; null when none covered it.")
+    international: str | None = Field(
+        description="How international outlets framed it; null when none covered it."
+    )
+    differs: str = Field(description="The clearest difference between the sides' framing.")

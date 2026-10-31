@@ -101,7 +101,11 @@ def _run(
 
 
 def _reply(*article_ids: str) -> Message:
-    return _message(json.dumps({"judgments": [_judgment(a) for a in article_ids]}))
+    return _message(
+        json.dumps(
+            {"facts": "Something happened.", "judgments": [_judgment(a) for a in article_ids]}
+        )
+    )
 
 
 def test_good_reply_judges_every_article_and_logs_spend(

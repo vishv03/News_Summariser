@@ -111,8 +111,15 @@ are judged (~60–80/day), which keeps cost low. Every rubric choice is the proj
 - **Translation:** the judge reads the original language and writes in English; non-English loaded
   words are quoted in the original with an English gloss.
 
-Sonnet then writes each story's framing comparison from the judge's output only, not the article
-text, at low effort, to stay inside the budget.
+The judge also writes a 2–3 sentence neutral account of what happened, once per story.
+
+Sonnet then writes each story's headline, one framing line per side with coverage and a "what
+differs" sentence (`prompts/summary.md`), from the judge's output only, not the article text, at
+low effort, to stay inside the budget.
+
+When a call fails, it is retried once. Articles the judge still misses show their outlet's
+baseline, labelled; a story the judge can't judge at all is headline-only. If Sonnet fails, the
+story shows the judge's fact line and takes instead.
 
 ## Story selection
 Every rule here is the project owner's; the reasons are in comments in `selection.py`.

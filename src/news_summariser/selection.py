@@ -79,7 +79,8 @@ TOPIC_DESCRIPTIONS: dict[Topic, str] = {
 Side = Literal["left", "right", "international"]
 
 
-def _side(source: Source) -> Side | None:
+def side_of(source: Source) -> Side | None:
+    """Which side an outlet is on, from its baseline lean; None for centre."""
     if source.lean_axis == "local":
         return "international"
     if source.baseline_lean < 0:
@@ -94,7 +95,7 @@ def score(story: Story, sources: Mapping[str, Source]) -> float:
     """Rank a story by log2(1 + outlets) x regions x sides present."""
     outlets = story.source_ids
     regions = {sources[o].region for o in outlets}
-    sides = {side for o in outlets if (side := _side(sources[o])) is not None}
+    sides = {side for o in outlets if (side := side_of(sources[o])) is not None}
     # log2 damps outlet count, so reach and balance outweigh one region covering a story heavily.
     return math.log2(1 + len(outlets)) * len(regions) * len(sides)
 
@@ -115,7 +116,7 @@ def _one_sided(story: Story, sources: Mapping[str, Source]) -> Side | None:
         return None
     for side in ("left", "right"):
         # Centre outlets stay in the total, so centre coverage makes a story less one-sided.
-        if sum(_side(s) == side for s in axis) >= ONE_SIDED_SHARE * len(axis):
+        if sum(side_of(s) == side for s in axis) >= ONE_SIDED_SHARE * len(axis):
             return side
     return None
 
@@ -244,7 +245,7 @@ def _blindspots(
         side = _one_sided(pick.story, sources)
         if side is not None:
             missing_side = "right" if side == "left" else "left"
-            if _enough_healthy((s for s in enabled if _side(s) == missing_side), health):
+            if _enough_healthy((s for s in enabled if side_of(s) == missing_side), health):
                 one_sided.append(pick.model_copy(update={"kind": "one_sided"}))
 
     # The non-Western slot is filled first; a story picked there leaves the one-sided pool.

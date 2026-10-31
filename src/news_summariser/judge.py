@@ -113,6 +113,7 @@ def judge_story(
     ids = _article_ids(story)
     message = _user_message(story, ids, sources)
     judgments: dict[str, ArticleJudgment] = {}
+    facts: str | None = None
     for _ in range(ATTEMPTS):
         try:
             reply = _ask(client, conn, settings, prompt, message, now)
@@ -121,8 +122,9 @@ def judge_story(
             log.warning("judge call failed for story %s: %s", story.story_id, e)
             break
         if reply is not None:
-            # A retry fills gaps only: the first good answer per article is kept, and ids the
-            # judge invented are dropped.
+            # A retry fills gaps only: the first good answer per article (and for the facts) is
+            # kept, and ids the judge invented are dropped.
+            facts = facts or reply.facts
             for j in reply.judgments:
                 url_hash = ids.get(j.article_id)
                 if url_hash is not None and url_hash not in judgments:
@@ -137,7 +139,9 @@ def judge_story(
             len(missing),
             len(ids),
         )
-    return JudgedStory(story_id=story.story_id, judgments=judgments, not_judged=missing)
+    return JudgedStory(
+        story_id=story.story_id, facts=facts, judgments=judgments, not_judged=missing
+    )
 
 
 def canned_judgment(story: Story) -> JudgedStory:
@@ -152,4 +156,8 @@ def canned_judgment(story: Story) -> JudgedStory:
         )
         for i, a in enumerate(story.articles, start=1)
     }
-    return JudgedStory(story_id=story.story_id, judgments=judgments)
+    return JudgedStory(
+        story_id=story.story_id,
+        facts="Dry run: placeholder facts, no AI call was made.",
+        judgments=judgments,
+    )

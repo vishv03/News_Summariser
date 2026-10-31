@@ -110,8 +110,22 @@ terms.
 
 If there are none, return an empty list.
 
+## Facts
+
+Once per story, not per article. `facts`: 2–3 sentences in English saying what happened, for a
+reader who has seen none of the articles.
+- Use only details that the articles report. Weight each side's outlets equally: don't prefer a
+  detail because more outlets on one side report it.
+- If only one side reports a significant fact, include it, attributed.
+- Attribute anything disputed to whoever claims it ("the ministry says…"), and give contested
+  figures as ranges or with their source. If outlets conflict on what happened, state the conflict.
+- Use no loaded or one-sided term, whether or not it was flagged under Loaded words.
+- Don't say who is right or which outlet got it right, and don't describe how outlets framed the
+  story; that is for the takes.
+
 ## Take
 
 `take`: one sentence in English, at most 25 words, saying how this article frames the story. Describe
-the framing; do not repeat the facts, and do not judge whether the outlet is right. This sentence is
+the framing; do not repeat the facts, and do not judge whether the outlet is right. Use the same level of detail and the same
+kind of description for every article. This sentence is
 what the daily write-up is built from, so make it specific.
