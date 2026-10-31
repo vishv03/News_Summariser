@@ -9,7 +9,20 @@ dependencies = [
     "httpx>=0.28.1",
     "pydantic>=2.14.2",
     "pyyaml>=6.0.3",
+    "scikit-learn>=1.9.1",
+    "sentence-transformers>=6.2.0",
+    "torch>=2.15.0",
 ]
+
+# PyPI's Linux torch is the CUDA build; Actions runners have no GPU, so take the CPU-only one
+# (ADR 0006). explicit = true keeps this index from being used for any other package.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
 
 [project.scripts]
 news-summariser = "news_summariser:main"

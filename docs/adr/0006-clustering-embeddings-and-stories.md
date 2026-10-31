@@ -104,6 +104,9 @@ tools, storage and interface around it.
 
 ## Consequences
 - Two new runtime packages: sentence-transformers (with PyTorch, CPU-only) and scikit-learn.
+  `torch` is also listed directly in `pyproject.toml`, as in uv's own CPU-only example, because
+  uv's docs don't say whether `[tool.uv.sources]` applies to packages we don't list ourselves.
+  The lockfile resolves Linux and Windows to `torch 2.15.0+cpu`, with no NVIDIA packages.
 - The model weights are about 471 MB. Actions must cache them, or every run downloads them again.
 - `cache.db` gets migration `0002`.
 - Clustering compares every pair of articles: about 9M distances at 3k articles. That fits in memory
