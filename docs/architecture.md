@@ -82,14 +82,15 @@ browser-like one but accepted the honest one.
 - If a story lacks a viewpoint because those feeds are down, the message says
   "view unavailable (N feeds offline)" instead of presenting a false blindspot.
 
-## Clustering *(planned, [ADR 0006](adr/0006-clustering-embeddings-and-stories.md))*
+## Clustering *([ADR 0006](adr/0006-clustering-embeddings-and-stories.md))*
 - Each article's title + summary is embedded with `paraphrase-multilingual-MiniLM-L12-v2`
   (sentence-transformers), so the same event in different languages lands close together before
   any paid translation. The model reads at most 128 tokens; the title comes first.
 - PyTorch is pinned to the CPU-only build: free Actions runners have no GPU, and the model is small.
 - Embeddings are stored in `cache.db` with the model name, so each run embeds only new articles.
-- Articles are grouped with agglomerative clustering (cosine distance, average linkage, one
-  distance threshold); every choice in it is the project owner's.
+- Articles are grouped with agglomerative clustering (cosine distance, average linkage) at
+  similarity 0.55. A story means the same broader story, an event plus its follow-ups and angles,
+  so different angles from left and right land together. Every choice in it is the project owner's.
 - Each `Story` has a `story_id` (its earliest article's `url_hash`), its articles, and derived
   properties. Region and lean are looked up from `sources.yaml`, never copied.
 

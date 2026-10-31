@@ -96,6 +96,15 @@ tools, storage and interface around it.
   and Actions installs match.
 - **Clustering:** scikit-learn `AgglomerativeClustering` with cosine distance, average linkage and a
   distance threshold, in `cluster.py`, with every choice in it made by the project owner.
+- **A story means the same broader story** (an event plus its follow-ups and angles), not only the
+  same event, because left and right often cover different angles of one story. The model can't
+  reliably separate "same event" from "same story, different angle": on 60 hand-labelled
+  cross-outlet pairs, the best "same event" cut-off still got 12 wrong, against 4 for "broader
+  story".
+- **Threshold: cosine similarity 0.55** (distance 0.45). On the labelled pairs, 0.49–0.55 tied
+  best. On 1,870 real articles (31 Oct 2026), 0.55 kept the Israel election as one story
+  (48 articles, 13 outlets); 0.60 split it in two, and 0.50 merged unrelated Korea news.
+  Clustering all of them took under half a second.
 - **Storage:** embeddings live in `cache.db` (migration `0002`), keyed by `url_hash`, with a `model`
   column, and are pruned with the articles at 48 hours.
 - **Input text:** title + summary, joined, with the model cutting at 128 tokens.
@@ -114,8 +123,10 @@ tools, storage and interface around it.
 - Story ids can drift: when a story's earliest article ages out of the 48-hour window, the story
   gets a new id, so a long-running story could look new again. `select.py` must handle this, for
   example by checking overlap with stories already posted.
-- The distance threshold is a tuned number owned by the project owner. It needs a small
-  hand-labelled set of articles to tune and test against.
+- The threshold is a tuned number owned by the project owner. The labelled pairs are real
+  headlines, so they stay out of the public repo; tests use made-up vectors and headlines.
+- Single-outlet clumps (for example one agency's news round-ups) can form at this threshold.
+  `select.py` must not treat them as stories, which its outlets-and-regions ranking already needs.
 - `select.py` takes the sources config as a second input, to look up region and lean.
 
 ## Revisit if
