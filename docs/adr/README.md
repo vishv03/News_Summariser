@@ -10,3 +10,4 @@ New ADRs start from [template.md](template.md) and take the next number.
 | [0003](0003-ai-models-haiku-and-sonnet.md) | AI models: Haiku 5.5 for bulk work, Sonnet 5.5 for the daily write-up | Accepted |
 | [0004](0004-hosting-github-actions-and-sqlite.md) | Hosting: GitHub Actions with SQLite state; v2 on student credits | Accepted |
 | [0005](0005-ingest-store-and-feed-health.md) | Ingest, store and feed health: httpx + feedparser, pydantic config, sqlite3 with numbered migrations | Accepted |
+| [0006](0006-clustering-embeddings-and-stories.md) | Clustering: multilingual embeddings (CPU-only PyTorch), agglomerative clustering, embeddings in cache.db, Story model | Accepted |
