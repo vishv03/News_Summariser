@@ -60,6 +60,22 @@ or all of the cap on its own.
 - *Score 0:* most short summaries would become centre, and nearly every one would need a shift
   explanation.
 
+#### Contested terms (added after the bias-auditor review)
+- **Flag one side's contested term (chosen):** for example "terrorists" or "freedom fighters", with
+  the term major wire copy uses as the neutral alternative. Within a story, never flag only one
+  side's terms. These are the words that matter most for a framing comparison.
+- *Flag, with any neutral term the model picks:* the alternative may vary from day to day.
+- *Flag neither side's term:* hides the most telling words, and "just as loaded" is a judgement
+  the model would make unevenly.
+
+#### Anchoring on the baseline (added after the bias-auditor review)
+- **A one-sentence `reason` for every score (chosen):** the judge still sees the baseline (ADR
+  0002), but agreeing with it needs the same evidence as moving away, so scores don't drift toward
+  each outlet's reputation. Costs about 20 output tokens per article.
+- *Hide the baseline from the judge:* no anchoring, but contradicts ADR 0002 and scores may flip
+  from day to day.
+- *A reason only for shifts of ±1 or more:* the cheapest answer is always "same as the baseline".
+
 #### Confidence
 - **low / medium / high, each defined in the rubric (chosen):** models are poorly calibrated on
   exact numbers.

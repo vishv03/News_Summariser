@@ -1,0 +1,37 @@
+# AI settings (ADR 0003, ADR 0008). Every value here is the project owner's: changing a model,
+# an effort level, a price or the cap needs their approval.
+
+# Which model does each job, and how hard it thinks. Effort is low | medium | high | xhigh | max.
+models:
+  judge:
+    id: claude-haiku-5-5
+    # The rubric has many rules (insufficient, contested terms, a reason for every score) that
+    # need some thinking; Haiku is cheap enough that medium costs ~$0.50/month.
+    effort: medium
+  summary:
+    id: claude-sonnet-5-5
+    # Low keeps the daily write-up near $3/month; it reads the judge's output, not the articles.
+    effort: low
+
+# USD per million tokens, copied from https://platform.claude.com/docs/en/about-claude/pricing
+# on 2026-10-31. Update by hand when Anthropic changes them; budget.py costs every call from these.
+# Haiku 5.5's prices are for prompts up to 100,000 tokens; ours are a few thousand.
+prices:
+  claude-haiku-5-5:
+    input: 0.10
+    output: 0.50
+    cache_write_5m: 0.125
+    cache_read: 0.01
+  claude-sonnet-5-5:
+    input: 2.00
+    output: 10.00
+    cache_write_5m: 2.50
+    cache_read: 0.10
+
+budget:
+  monthly_cap_usd: 4.00
+  # Pre-flight check: month-to-date + the most expensive day of the last N days must stay under
+  # the cap, or the whole digest is headline-only.
+  estimate_days: 7
+  # Used when there is no spend history at all (the first run).
+  estimate_without_history_usd: 0.25
