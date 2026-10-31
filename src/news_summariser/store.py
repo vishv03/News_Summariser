@@ -10,7 +10,15 @@ from typing import Literal
 
 import numpy as np
 
-from news_summariser.models import Article, FeedHealth, PostedStory, SpendRecord
+from news_summariser.models import (
+    Article,
+    ChainLink,
+    DigestDay,
+    FeedHealth,
+    Pick,
+    PostedStory,
+    SpendRecord,
+)
 
 STATE_PATH = Path("data/state.db")
 CACHE_PATH = Path("data/cache.db")
@@ -23,6 +31,7 @@ ARTICLE_RETENTION = timedelta(hours=48)
 POSTED_STORY_RETENTION = timedelta(days=30)
 # Long enough for the 7-day estimate and to audit last month against the bill.
 SPEND_RETENTION = timedelta(days=30)
+DIGEST_DAY_RETENTION = timedelta(days=30)
 
 Kind = Literal["state", "cache"]
 
@@ -204,6 +213,88 @@ def posted_stories(conn: sqlite3.Connection) -> list[PostedStory]:
     ]
 
 
+def digest_day(conn: sqlite3.Connection, day: date) -> DigestDay | None:
+    """Return how far a day's digest got, or None if it never started."""
+    row = conn.execute(
+        "SELECT header_sent, top_sent, one_sided_sent, non_western_sent, done_at"
+        " FROM digest_days WHERE day = ?",
+        (day.isoformat(),),
+    ).fetchone()
+    if row is None:
+        return None
+    header, top, one_sided, non_western, done_at = row
+    return DigestDay(
+        day=day,
+        header_sent=bool(header),
+        top_sent=top,
+        one_sided_sent=one_sided,
+        non_western_sent=non_western,
+        done=done_at is not None,
+    )
+
+
+def start_digest_day(conn: sqlite3.Connection, day: date, now: datetime) -> DigestDay:
+    """Record that a day's digest has started (a no-op on a retry) and return its progress."""
+    with conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO digest_days (day, started_at) VALUES (?, ?)",
+            (day.isoformat(), _iso(now)),
+        )
+    progress = digest_day(conn, day)
+    assert progress is not None
+    return progress
+
+
+def record_header_sent(conn: sqlite3.Connection, day: date) -> None:
+    """Mark the day's header message as sent."""
+    with conn:
+        conn.execute("UPDATE digest_days SET header_sent = 1 WHERE day = ?", (day.isoformat(),))
+
+
+def record_story_sent(conn: sqlite3.Connection, day: date, pick: Pick, now: datetime) -> None:
+    """Write one sent story to the posted record and count its slot, in one transaction."""
+    # One transaction per story, right after its own send (ADR 0009): a crash between stories
+    # leaves every sent story recorded, so a retry's selection skips it as a repeat.
+    with conn:
+        cursor = conn.execute(
+            "INSERT INTO posted_stories (posted_at, kind, update_of, last_linked_at)"
+            " VALUES (?, ?, ?, ?)",
+            (_iso(now), pick.kind, pick.update_of, _iso(now)),
+        )
+        conn.executemany(
+            "INSERT INTO posted_articles (url_hash, source_id, posted_story_id, role)"
+            " VALUES (?, ?, ?, 'posted')",
+            [(a.url_hash, a.source_id, cursor.lastrowid) for a in pick.story.articles],
+        )
+        # The column name comes from PickKind's fixed values, never from input.
+        conn.execute(
+            f"UPDATE digest_days SET {pick.kind}_sent = {pick.kind}_sent + 1 WHERE day = ?",
+            (day.isoformat(),),
+        )
+
+
+def finish_digest_day(
+    conn: sqlite3.Connection, day: date, links: Iterable[ChainLink], now: datetime
+) -> None:
+    """Write the chain links of skipped repeats and mark the day done, in one transaction."""
+    links = list(links)
+    with conn:
+        # OR IGNORE: a link already chained on an earlier day is already in the record.
+        conn.executemany(
+            "INSERT OR IGNORE INTO posted_articles (url_hash, source_id, posted_story_id, role)"
+            " VALUES (?, ?, ?, 'chained')",
+            [(link.url_hash, link.source_id, link.posted_story_id) for link in links],
+        )
+        # Pruning counts from here, so a story that keeps running keeps its chain (ADR 0007).
+        conn.executemany(
+            "UPDATE posted_stories SET last_linked_at = ? WHERE id = ?",
+            [(_iso(now), story_id) for story_id in {link.posted_story_id for link in links}],
+        )
+        conn.execute(
+            "UPDATE digest_days SET done_at = ? WHERE day = ?", (_iso(now), day.isoformat())
+        )
+
+
 def add_spend(conn: sqlite3.Connection, record: SpendRecord) -> None:
     """Record one paid API call."""
     u = record.usage
@@ -259,6 +350,11 @@ def prune(state: sqlite3.Connection, cache: sqlite3.Connection, now: datetime) -
     month_start = now.astimezone(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     state.execute(
         "DELETE FROM spend WHERE at < ?", (_iso(min(month_start, now - SPEND_RETENTION)),)
+    )
+    # Only a retry of today's digest reads these, so a month is plenty.
+    state.execute(
+        "DELETE FROM digest_days WHERE day < ?",
+        ((now - DIGEST_DAY_RETENTION).date().isoformat(),),
     )
     cache.execute("DELETE FROM articles WHERE published_at < ?", (_iso(now - ARTICLE_RETENTION),))
     # Keyed to articles rather than by age, so a vector never outlives the text it came from.

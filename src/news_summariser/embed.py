@@ -1,7 +1,7 @@
 """Turn articles into vectors for clustering, reusing ones already cached (ADR 0006)."""
 
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Hashable, Mapping, Sequence
 from typing import Any, Protocol
 
 import numpy as np
@@ -29,12 +29,22 @@ def article_text(article: Article) -> str:
     return "\n".join(part for part in (article.title, article.summary) if part)
 
 
-def _load_model() -> Encoder:
+def load_model() -> Encoder:
+    """Load the embedding model, pinned to the tested revision, on CPU."""
     # Imported here, not at the top: it pulls in PyTorch, and runs with nothing new to embed
     # shouldn't pay for that.
     from sentence_transformers import SentenceTransformer
 
     return SentenceTransformer(MODEL_NAME, revision=MODEL_REVISION, device="cpu")
+
+
+def embed_texts[K: Hashable](texts: Mapping[K, str], model: Encoder) -> dict[K, np.ndarray]:
+    """Return a unit-length vector for each text, keyed like the input; nothing is cached."""
+    # Unit length is required by selection's topic match, which ranks by dot product.
+    encoded = np.asarray(
+        model.encode(list(texts.values()), normalize_embeddings=True), dtype=np.float32
+    )
+    return dict(zip(texts, encoded, strict=True))
 
 
 def embed_articles(
@@ -44,7 +54,7 @@ def embed_articles(
     vectors = store.get_embeddings(conn, (a.url_hash for a in articles), MODEL_KEY)
     missing = [a for a in articles if a.url_hash not in vectors]
     if missing:
-        model = model or _load_model()
+        model = model or load_model()
         # Unit length makes cosine similarity a plain dot product for clustering.
         encoded = np.asarray(
             model.encode([article_text(a) for a in missing], normalize_embeddings=True),

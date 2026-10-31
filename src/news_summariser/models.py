@@ -1,13 +1,14 @@
 """Data passed between modules."""
 
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # An Issue opens only after this many unhealthy runs in a row AND this long unhealthy (ADR 0005).
-# Runs are every 20 minutes, so 3 runs alone would be one hour: too twitchy for short outages.
+# Once breaking.yml runs every 20 minutes, 3 runs alone would be one hour: too twitchy for short
+# outages. (In v1, ingest runs every 3 hours, so 3 runs already take 9; ADR 0009.)
 STRIKES_FOR_ISSUE = 3
 UNHEALTHY_FOR_ISSUE = timedelta(hours=6)
 
@@ -136,6 +137,41 @@ class Selection(BaseModel):
     top: tuple[Pick, ...]
     blindspots: tuple[Pick, ...]
     chain_links: tuple[ChainLink, ...]
+
+
+class DigestDay(BaseModel):
+    """How far one day's digest got, as read from state.db (ADR 0009)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    day: date
+    header_sent: bool = False
+    top_sent: int = 0
+    one_sided_sent: int = 0
+    non_western_sent: int = 0
+    done: bool = False
+
+    @property
+    def blindspots_sent(self) -> int:
+        return self.one_sided_sent + self.non_western_sent
+
+
+class Button(BaseModel):
+    """A link button under a message."""
+
+    model_config = ConfigDict(frozen=True)
+
+    label: str
+    url: str
+
+
+class RenderedMessage(BaseModel):
+    """One Telegram message, ready to send: HTML text plus link buttons."""
+
+    model_config = ConfigDict(frozen=True)
+
+    text: str
+    buttons: tuple[Button, ...] = ()
 
 
 class FetchOutcome(BaseModel):

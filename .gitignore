@@ -18,10 +18,6 @@ __pycache__/
 # Article text cache: kept between runs by actions/cache, never committed (ADR 0005)
 data/cache.db
 
-# Committed only by the scheduled workflow (ADR 0004). Ignored until step 6 builds it, so local
-# test runs never reach the repo; step 6 removes this line.
-data/state.db
-
 # Editors / OS
 .vscode/
 .idea/

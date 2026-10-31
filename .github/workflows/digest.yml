@@ -1,0 +1,102 @@
+# Daily digest at 01:15 UTC (about 07:00 IST), and an ingest-only run every 3 hours so busy feeds
+# that list only their last few hours still reach the digest's 24-hour window (ADR 0004, 0009).
+# Every change here needs the project owner's approval (CLAUDE.md).
+name: digest
+
+on:
+  schedule:
+    # GitHub often starts scheduled runs late; the digest posts as soon as it is ready.
+    - cron: "15 1 * * *"
+    # Ingest only. Minute 40 keeps it off the top of the hour, where GitHub's delays are worst.
+    - cron: "40 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      task:
+        description: What to run
+        type: choice
+        options: [digest, ingest]
+        default: digest
+
+permissions:
+  contents: write # commit data/state.db
+  issues: write # open and close feed Issues (ADR 0005)
+
+# Every workflow that writes state.db joins this group, so two runs never clash (ADR 0004).
+concurrency:
+  group: state-db
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TASK: ${{ github.event_name == 'workflow_dispatch' && inputs.task || (github.event.schedule == '15 1 * * *' && 'digest' || 'ingest') }}
+      HF_HOME: ${{ github.workspace }}/.cache/huggingface
+    steps:
+      # Third-party actions are pinned to commit SHAs (owner decision, step 6): this job can
+      # write to the repo, so a moved tag must not be able to run new code here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          # Caches downloaded wheels, including the large CPU-only torch.
+          enable-cache: true
+
+      - run: uv sync --frozen --no-dev
+
+      # The embedding model is ~471 MB; keyed on the pinned revision in embed.py (ADR 0006).
+      - name: Restore the embedding model
+        if: env.TASK == 'digest'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/huggingface
+          key: hf-paraphrase-multilingual-MiniLM-L12-v2-e8f8c211226b894fcb81acc59f3b34ba3efd5f42
+
+      # Article text lives here, never in the repo (ADR 0005). A new key each run, so the newest
+      # copy is always the one restored.
+      - name: Restore cache.db
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: data/cache.db
+          key: cache-db-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: cache-db-
+
+      - name: Ingest
+        if: env.TASK == 'ingest'
+        run: uv run python -m news_summariser ingest
+
+      - name: Digest
+        if: env.TASK == 'digest'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_DIGEST_TOPIC_ID: ${{ secrets.TELEGRAM_DIGEST_TOPIC_ID }}
+        run: uv run python -m news_summariser digest
+
+      - name: Feed Issues
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run python -m news_summariser feed-issues
+
+      - name: Save cache.db
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: data/cache.db
+          key: cache-db-${{ github.run_id }}-${{ github.run_attempt }}
+
+      # Even after a failure: a re-run must see which stories were already sent (ADR 0009).
+      - name: Commit state.db
+        if: always()
+        run: |
+          [ -f data/state.db ] || { echo "no state.db yet"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/state.db
+          if git diff --cached --quiet; then echo "state.db unchanged"; exit 0; fi
+          git commit -m "chore(state): $TASK run ${{ github.run_id }}"
+          git pull --rebase
+          git push

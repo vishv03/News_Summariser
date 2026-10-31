@@ -13,3 +13,4 @@ New ADRs start from [template.md](template.md) and take the next number.
 | [0006](0006-clustering-embeddings-and-stories.md) | Clustering: multilingual embeddings (CPU-only PyTorch), agglomerative clustering, embeddings in cache.db, Story model | Accepted |
 | [0007](0007-posted-stories-in-state-db.md) | Posted stories: two tables in state.db, written after a successful send, read by selection | Accepted |
 | [0008](0008-judge-summary-and-budget.md) | Judge, summary and budget: anthropic SDK, rubric structure, spend log in state.db | Accepted |
+| [0009](0009-telegram-delivery-and-idempotent-posting.md) | Telegram delivery: python-telegram-bot, per-story marks and a per-day record for safe re-runs | Accepted |

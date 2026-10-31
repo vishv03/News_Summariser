@@ -4,9 +4,9 @@ A Telegram bot that posts a daily digest showing how left, right and internation
 the same news story, plus conservative breaking-news alerts. Each choice below links to the ADR
 (Architecture Decision Record) that explains why.
 
-> **Status:** steps 0–5 are built: ingest, clustering, selection, judging, the write-up and the
-> budget. Rendering, Telegram sending and the scheduled workflow come next (see
-> [Build order](#build-order)). Sections marked *(planned)* aren't built yet.
+> **Status:** steps 0–6 are built: v1 posts a daily digest from GitHub Actions. GDELT and
+> breaking alerts come next (see [Build order](#build-order)). Sections marked *(planned)* aren't
+> built yet.
 
 ## Pipeline
 
@@ -54,7 +54,9 @@ between runs with `actions/cache`, so outlets' text never enters the public repo
 | `prompts/judge.md` | The lean-judging rubric ([ADR 0002](adr/0002-lean-judging-ai-with-outlet-baseline.md)) | **Project owner decides; Claude writes** |
 | `judge.py`, `summarize.py` | Call the AI models ([ADR 0003](adr/0003-ai-models-haiku-and-sonnet.md)) | Claude |
 | `budget.py` | Track spend and enforce the cap | Claude |
-| `render.py`, `telegram.py` | Build and send messages | Claude |
+| `render.py`, `send.py` | Build and send messages ([ADR 0009](adr/0009-telegram-delivery-and-idempotent-posting.md)) | Claude |
+| `digest.py` | Run the whole digest; a re-run sends only what's missing | Claude |
+| `issues.py` | Open and close GitHub Issues for broken feeds | Claude |
 
 ## Sources
 38 outlets across 7 regions and 9 languages. Each has a `baseline_lean` on one of four axes:
@@ -77,7 +79,7 @@ browser-like one but accepted the honest one.
 - Each run records per-source health: last success, newest item date, consecutive failures.
   **Unhealthy** = an error, 0 items, or nothing new in 48 hours. That catches the silent failures:
   a URL that now returns a web page, or a feed that has stopped updating.
-- *(Planned, step 6.)* After 3 unhealthy runs in a row, the workflow opens a GitHub Issue for that feed and closes it
+- After 3 unhealthy runs in a row (and at least 6 hours), the workflow opens a GitHub Issue for that feed and closes it
   automatically when the feed recovers.
 - Redirects are followed and flagged in the issue. `sources.yaml` is never edited automatically.
 - If a story lacks a viewpoint because those feeds are down, the message says
@@ -153,24 +155,49 @@ One group with Topics turned on: 📰 Daily Digest · 🚨 Breaking · 💬 Disc
 admin that only posts. v1 has no bot commands, because GitHub Actions can't run an always-on bot;
 link buttons work without one.
 
-Each story is one message:
+Messages are sent with python-telegram-bot ([ADR 0009](adr/0009-telegram-delivery-and-idempotent-posting.md)),
+one a second to stay inside Telegram's 20-a-minute group limit. The digest starts with a header:
+the date, the number of stories, a one-line legend, and any notices (budget reached, feeds
+offline). Then each story is one message:
 
 ```
+🔦 Blindspot: covered mostly by the right      ← blindspots only (🌏 for non-Western)
 📰 Headline (neutral, written by the AI)
 2–3 sentence factual summary.
 
-🔵 Left framing: …   🔴 Right framing: …   🌍 International: …
-⚠ Loaded language spotted: "…" (Outlet)
+🔵 Left: how left outlets framed it
+The Guardian −1 · HuffPost −2 (baseline)        ← each outlet's judged lean, or its baseline
+🔴 Right: …   🌍 International: …
+⚪ Also covering: BBC News 0
+⚠ Loaded language: "regime" → government (Fox News) · …   ← at most one per side
+🔍 What differs: …
 
-[Left take] [Right take] [Local-language source]   ← link buttons
+[🔵 The Guardian] [🔴 Fox News] [🌍 Al Jazeera] [🗣 Le Monde (fr)]   ← link buttons
 ```
 
-Messages use HTML formatting and stay under Telegram's 4,096-character limit.
+- Each side's button opens its most strongly leaning article (ties go to the earliest), the
+  clearest example of that side's framing. The ⚠ flag comes from the same article. A 🗣 button
+  links the first non-English article, unless a side button already does.
+- A side with no coverage shows "view unavailable (N feeds offline)" only when fewer than half of
+  its feeds are healthy, the same rule selection uses for blindspots; otherwise it's left out.
+- 🏛 marks state media. If Sonnet fails, the judge's facts and takes are shown with no "what
+  differs" line. With the budget spent, stories show outlets' own titles and links only.
+- Messages use HTML and stay under Telegram's 4,096-character limit: outlet lines and the ⚠ line
+  are dropped first, then long text is shortened.
 
 ## Reliability
-- **Idempotent posting:** GitHub can re-run a job. Before sending, the digest commits a
-  "started" record for the day, then marks each message as sent. A retry sends only what's
-  missing, and skips entirely if the day is marked done.
+- **Idempotent posting** ([ADR 0009](adr/0009-telegram-delivery-and-idempotent-posting.md)):
+  GitHub can re-run a job. A `digest_days` row per IST date records the header and how many
+  stories of each kind were sent; each story's posted record is written right after its own send.
+  A retry re-runs the pipeline, selection skips sent stories as repeats, and only the missing
+  slots go out. A day marked done is skipped. The workflow commits `state.db` even after a failure.
+- **Telegram errors:** flood waits are waited out; connection errors are retried; a timeout is
+  never retried, because the message may have arrived. A rejected message skips that story; a
+  removed bot or bad token stops the run. Any failure exits non-zero, so a re-run fills the gaps.
+- **Schedule** (`.github/workflows/digest.yml`): the digest at 01:15 UTC (about 07:00 IST), posted
+  as soon as it's ready, and ingest only every 3 hours, so busy feeds that list only a few hours
+  of items still reach the 24-hour window. One `state-db` concurrency group; actions pinned to
+  commit SHAs.
 - **State pruning:** rows older than 30 days are deleted so `state.db` stays small.
 - **Secrets:** only in GitHub Secrets and a local `.env`. Logs never print keys, tokens or chat
   IDs, because Actions logs are public.
@@ -196,7 +223,7 @@ Messages use HTML formatting and stay under Telegram's 4,096-character limit.
 3. ✅ Cluster *(owner-decided)*
 4. ✅ Select *(owner-decided)*
 5. ✅ Judge + summarize + budget (rubric owner-decided)
-6. Render + Telegram + `digest.yml`: **v1 ships**
+6. ✅ Render + Telegram + `digest.yml`: **v1 ships** ([ADR 0009](adr/0009-telegram-delivery-and-idempotent-posting.md))
 7. GDELT + `breaking.yml`: **v1.1**
 8. Always-on bot on student cloud credits, with `/more`, `/topic`, `/sources`: **v2**
 
