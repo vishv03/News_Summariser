@@ -45,11 +45,11 @@ between runs with `actions/cache`, so outlets' text never enters the public repo
 |---|---|---|
 | `config/sources.yaml` | Outlets, baseline lean, ownership, fact-check notes ([ADR 0001](adr/0001-news-sources-rss-and-gdelt.md)) | Project owner decides; Claude drafts |
 | `ingest.py` | Fetch feeds, clean up URLs, dedupe, record feed health | Claude |
-| `store.py` | SQLite access: articles, stories, posts, feed health, spend | Claude |
+| `store.py` | SQLite access: articles, embeddings, posted stories, feed health, spend | Claude |
 | `gdelt.py` | Global coverage spikes for breaking news | Claude |
 | `embed.py` | Turn articles into vectors, reusing cached ones ([ADR 0006](adr/0006-clustering-embeddings-and-stories.md)) | Claude |
 | `cluster.py` | Group articles about the same event, across languages | **Project owner decides; Claude writes** |
-| `select.py` | Rank stories, pick blindspots, decide breaking | **Project owner decides; Claude writes** |
+| `selection.py` | Rank stories, pick blindspots, decide breaking | **Project owner decides; Claude writes** |
 | `prompts/judge.md` | The lean-judging rubric ([ADR 0002](adr/0002-lean-judging-ai-with-outlet-baseline.md)) | **Project owner decides; Claude writes** |
 | `judge.py`, `summarize.py` | Call the AI models ([ADR 0003](adr/0003-ai-models-haiku-and-sonnet.md)) | Claude |
 | `budget.py` | Track spend and enforce the cap | Claude |
@@ -100,12 +100,29 @@ framing tags, loaded words and confidence. It sees each outlet's baseline and mu
 shift of ±1 or more. Output is structured JSON, checked with pydantic. Only articles in stories
 that make the digest are judged (~60–80/day), which keeps cost low.
 
-## Story selection *(planned)*
-- **Top 5:** ranked by distinct outlets × regions covered × spread across the spectrum, rotating
-  across the four topic areas (world politics, economy, science/tech/climate, culture/society) so
-  one topic can't take every slot.
-- **3 blindspots:** stories with 3+ articles where 75%+ of coverage comes from one side, plus one
-  slot for a story covered only by non-Western outlets. Offline feeds don't count as "not covering".
+## Story selection
+Every rule here is the project owner's; the reasons are in comments in `selection.py`.
+- **Eligible:** 3+ distinct outlets and at least one article in the last 24 hours. A story keeps
+  all its articles, so the judge still sees day-one framing.
+- **Sides:** 🔵 Left and 🔴 Right are us/uk/national outlets with baseline lean below or above 0;
+  🌍 International is every `local` outlet. Centre outlets count as coverage but are on no side.
+  Selection runs before the judge, so it uses baseline lean only.
+- **Top 5:** ranked by log₂(1 + outlets) × regions × sides present, ties to the most recent
+  article. At most 2 per topic area (world politics, economy, science/tech/climate,
+  culture/society). A story's area is the one whose one-sentence description its average article
+  vector is closest to. Fewer than 5 are posted rather than lowering the bar.
+- **3 blindspots**, never stories already in the top 5:
+  - *One-sided* (2 slots): 3+ us/uk/national outlets with 75%+ of them on Left or on Right.
+    `local` outlets are left out of this count, or most stories would look "one-sided
+    International".
+  - *Non-Western* (1 slot, filled first): 3+ outlets, all outside the us and europe regions.
+  - An empty slot is filled from the other pool, and a story is never picked twice.
+  - Offline feeds don't count as "not covering": a blindspot is skipped when fewer than half of
+    the missing side's outlets are healthy. An outlet with no health record counts as unhealthy.
+- **Repeats** ([ADR 0007](adr/0007-posted-stories-in-state-db.md)): a story overlapping a posted
+  story by any article is skipped, and its new articles are chained to that post so the overlap
+  carries forward as the 48-hour cache moves on. It comes back as an update with 3+ outlets that
+  weren't in the version last posted. Posts are recorded only after a successful send.
 - **Breaking (conservative):** 8+ outlets across 3+ regions within 2 hours, **and** a GDELT
   volume spike, **and** not posted before. Expect 0–2 a day.
 
@@ -143,10 +160,11 @@ Messages use HTML formatting and stay under Telegram's 4,096-character limit.
 - Prices are taken from the official docs, never guessed.
 
 ## Build order
-0. ✅ Setup: uv scaffold, CLAUDE.md, ADRs 0001–0004, hooks, subagents, `/adr`1. ✅ Sources: `config/sources.yaml`
-2. Ingest + store + feed health (ADR 0005)
-3. Cluster *(owner-decided)*
-4. Select *(owner-decided)*
+0. ✅ Setup: uv scaffold, CLAUDE.md, ADRs 0001–0004, hooks, subagents, `/adr`
+1. ✅ Sources: `config/sources.yaml`
+2. ✅ Ingest + store + feed health (ADR 0005)
+3. ✅ Cluster *(owner-decided)*
+4. ✅ Select *(owner-decided)*
 5. Judge + summarize + budget (rubric owner-decided)
 6. Render + Telegram + `digest.yml`: **v1 ships**
 7. GDELT + `breaking.yml`: **v1.1**

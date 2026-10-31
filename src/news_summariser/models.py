@@ -1,6 +1,7 @@
 """Data passed between modules."""
 
 from datetime import datetime, timedelta
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -52,6 +53,59 @@ class Story(BaseModel):
     @property
     def last_published(self) -> datetime:
         return max(a.published_at for a in self.articles)
+
+
+Topic = Literal["world_politics", "economy", "science_tech_climate", "culture_society"]
+# top: one of the top 5. one_sided: a blindspot covered mostly by Left or Right.
+# non_western: a blindspot covered only by outlets outside the us and europe regions.
+PickKind = Literal["top", "one_sided", "non_western"]
+
+
+class PostedStory(BaseModel):
+    """A story already sent in a digest, as read from state.db (ADR 0007)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: int
+    posted_at: datetime
+    kind: PickKind
+    # Outlets in the story when it was sent; the new-outlets rule counts against these.
+    posted_outlets: frozenset[str]
+    # Posted and chained articles alike: any overlap means the same story.
+    url_hashes: frozenset[str]
+
+
+class Pick(BaseModel):
+    """One story chosen for the digest."""
+
+    model_config = ConfigDict(frozen=True)
+
+    story: Story
+    topic: Topic
+    score: float
+    kind: PickKind
+    # The posted story this one updates, or None when it's new.
+    update_of: int | None = None
+
+
+class ChainLink(BaseModel):
+    """An article from a skipped repeat, to be added to its posted story after the send."""
+
+    model_config = ConfigDict(frozen=True)
+
+    posted_story_id: int
+    url_hash: str
+    source_id: str
+
+
+class Selection(BaseModel):
+    """What select() chose, plus the chain links step 6 writes after sending."""
+
+    model_config = ConfigDict(frozen=True)
+
+    top: tuple[Pick, ...]
+    blindspots: tuple[Pick, ...]
+    chain_links: tuple[ChainLink, ...]
 
 
 class FetchOutcome(BaseModel):

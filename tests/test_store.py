@@ -101,3 +101,59 @@ def test_recent_articles_window_is_right_whatever_the_callers_timezone(
     got = store.recent_articles(cache, since=(NOW - timedelta(hours=3)).astimezone(ist))
 
     assert [a.url_hash for a in got] == ["a"]
+
+
+def _insert_post(
+    state: sqlite3.Connection, post_id: int, last_linked_at: str, articles: list[tuple]
+) -> None:
+    state.execute(
+        "INSERT INTO posted_stories (id, posted_at, kind, last_linked_at) VALUES (?, ?, 'top', ?)",
+        (post_id, last_linked_at, last_linked_at),
+    )
+    state.executemany(
+        "INSERT INTO posted_articles (url_hash, source_id, posted_story_id, role)"
+        " VALUES (?, ?, ?, ?)",
+        [(h, s, post_id, role) for h, s, role in articles],
+    )
+
+
+def test_posted_stories_keep_chained_outlets_out_of_posted_outlets() -> None:
+    state, _ = open_db(Path("unused"), "state", dry_run=True)
+    _insert_post(
+        state,
+        1,
+        store._iso(NOW),
+        [("a", "bbc", "posted"), ("b", "fox", "posted"), ("c", "cnn", "chained")],
+    )
+
+    (posted,) = store.posted_stories(state)
+
+    assert posted.id == 1
+    assert posted.posted_at == NOW
+    assert posted.posted_outlets == {"bbc", "fox"}
+    assert posted.url_hashes == {"a", "b", "c"}
+
+
+def test_prune_keeps_posted_stories_still_being_chained() -> None:
+    state, _ = open_db(Path("unused"), "state", dry_run=True)
+    cache, _ = open_db(Path("unused"), "cache", dry_run=True)
+    _insert_post(state, 1, store._iso(NOW - timedelta(days=31)), [("old", "bbc", "posted")])
+    _insert_post(state, 2, store._iso(NOW - timedelta(days=29)), [("live", "bbc", "posted")])
+
+    store.prune(state, cache, NOW)
+
+    assert [p.id for p in store.posted_stories(state)] == [2]
+    # The cascade took the pruned story's articles with it.
+    assert state.execute("SELECT url_hash FROM posted_articles").fetchall() == [("live",)]
+
+
+def test_pruning_an_old_post_keeps_its_update() -> None:
+    state, _ = open_db(Path("unused"), "state", dry_run=True)
+    cache, _ = open_db(Path("unused"), "cache", dry_run=True)
+    _insert_post(state, 1, store._iso(NOW - timedelta(days=31)), [("a", "bbc", "posted")])
+    _insert_post(state, 2, store._iso(NOW), [("a", "bbc", "posted"), ("b", "fox", "posted")])
+    state.execute("UPDATE posted_stories SET update_of = 1 WHERE id = 2")
+
+    store.prune(state, cache, NOW)
+
+    assert state.execute("SELECT id, update_of FROM posted_stories").fetchall() == [(2, None)]

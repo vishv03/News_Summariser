@@ -170,6 +170,11 @@ def store_items(
         # With no feed date, first-seen time stands in, so an undated item ages out like the rest
         # instead of looking fresh every time it is re-fetched.
         published_at = item.published_at or seen.get(h, now)
+        # A date in the future (a wrong timezone, a scheduled post) would keep the item looking
+        # fresh for days: eligible for the digest, winning ties, and not pruned. First-seen time is
+        # the honest stand-in, as for undated items.
+        if published_at > now:
+            published_at = seen.get(h, now)
         newest = max(newest, published_at) if newest else published_at
         if now - published_at > ARTICLE_RETENTION:
             continue

@@ -51,7 +51,7 @@ ADR 0005. `--dry-run` must be able to run selection without writing anything.
   - `posted_articles`: `url_hash`, `source_id`, the posted story it belongs to, and `role`
     (`posted` or `chained`), indexed on `url_hash`. Deleting a posted story deletes its articles
     (a foreign key with `ON DELETE CASCADE`).
-- **`select.py` only reads this record.** It returns its picks plus its chain links (the articles of
+- **`selection.py` only reads this record.** It returns its picks plus its chain links (the articles of
   skipped repeats).
 - **Rows are written only after a successful send, by step 6's code.** If selection wrote them when
   picking and the send then failed, the story would be blocked as a repeat although nobody saw it.
@@ -72,4 +72,4 @@ ADR 0005. `--dry-run` must be able to run selection without writing anything.
 - A story is re-posted without the "update" label more than once a month: article overlap is
   missing repeats, and matching may need embedding similarity.
 - One story is posted as an "update" 3+ days running more than once a month: the 3-new-outlets
-  rule is too loose. That rule is the owner's to retune in `select.py` without a new ADR.
+  rule is too loose. That rule is the owner's to retune in `selection.py` without a new ADR.

@@ -35,5 +35,5 @@ def cluster(articles: list[Article], vectors: dict[str, np.ndarray]) -> list[Sto
     groups: dict[int, list[Article]] = {}
     for article, label in zip(articles, labels, strict=True):
         groups.setdefault(int(label), []).append(article)
-    # Sorted so the same input always gives the same output order; select.py does the ranking.
+    # Sorted so the same input always gives the same output order; selection.py does the ranking.
     return sorted((Story(articles=tuple(g)) for g in groups.values()), key=lambda s: s.story_id)

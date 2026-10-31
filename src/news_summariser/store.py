@@ -10,7 +10,7 @@ from typing import Literal
 
 import numpy as np
 
-from news_summariser.models import Article, FeedHealth
+from news_summariser.models import Article, FeedHealth, PostedStory
 
 STATE_PATH = Path("data/state.db")
 CACHE_PATH = Path("data/cache.db")
@@ -19,6 +19,8 @@ CACHE_PATH = Path("data/cache.db")
 SEEN_URL_RETENTION = timedelta(days=30)
 # The digest looks back 24 hours; 48 leaves room for a missed day.
 ARTICLE_RETENTION = timedelta(hours=48)
+# A story quiet this long that comes back is treated as new (ADR 0007).
+POSTED_STORY_RETENTION = timedelta(days=30)
 
 Kind = Literal["state", "cache"]
 
@@ -63,6 +65,9 @@ def open_db(path: Path, kind: Kind, *, dry_run: bool = False) -> tuple[sqlite3.C
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(path)
+    # Off by default in SQLite and set per connection; pruning posted stories relies on the
+    # cascade to delete their articles (ADR 0007).
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn, migrate(conn, kind) == 0
 
 
@@ -172,10 +177,41 @@ def save_health(conn: sqlite3.Connection, health: FeedHealth) -> None:
     )
 
 
+def posted_stories(conn: sqlite3.Connection) -> list[PostedStory]:
+    """Return every posted story still on record, oldest first."""
+    stories = {
+        row[0]: (row[1], row[2], set[str](), set[str]())
+        for row in conn.execute("SELECT id, posted_at, kind FROM posted_stories ORDER BY id")
+    }
+    for story_id, url_hash, source_id, role in conn.execute(
+        "SELECT posted_story_id, url_hash, source_id, role FROM posted_articles"
+    ):
+        _, _, outlets, hashes = stories[story_id]
+        hashes.add(url_hash)
+        if role == "posted":
+            outlets.add(source_id)
+    return [
+        PostedStory(
+            id=story_id,
+            posted_at=datetime.fromisoformat(posted_at),
+            kind=kind,
+            posted_outlets=frozenset(outlets),
+            url_hashes=frozenset(hashes),
+        )
+        for story_id, (posted_at, kind, outlets, hashes) in stories.items()
+    ]
+
+
 def prune(state: sqlite3.Connection, cache: sqlite3.Connection, now: datetime) -> None:
-    """Delete seen URLs older than 30 days, and cached articles and their vectors after 48 hours."""
+    """Delete old seen URLs and quiet posted stories (30 days), and cached articles (48 hours)."""
     state.execute(
         "DELETE FROM seen_urls WHERE first_seen_at < ?", (_iso(now - SEEN_URL_RETENTION),)
+    )
+    # Counted from the last chained article, not the post date, so a story still running keeps
+    # its chain (ADR 0007). Its articles go with it through ON DELETE CASCADE.
+    state.execute(
+        "DELETE FROM posted_stories WHERE last_linked_at < ?",
+        (_iso(now - POSTED_STORY_RETENTION),),
     )
     cache.execute("DELETE FROM articles WHERE published_at < ?", (_iso(now - ARTICLE_RETENTION),))
     # Keyed to articles rather than by age, so a vector never outlives the text it came from.

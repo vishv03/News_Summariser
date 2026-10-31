@@ -38,7 +38,7 @@ likely cause in plain words, suggest a fix, and wait for me. Don't try fixes on 
 ## Ownership: I decide these, Claude writes them
 I'm the architect for the core logic. This covers the modules that do it, whatever they're named:
 - Story clustering: grouping articles into stories (currently `src/news_summariser/cluster.py`)
-- Story selection: ranking, topic rotation, blindspot rules (currently `src/news_summariser/select.py`)
+- Story selection: ranking, topic rotation, blindspot rules (currently `src/news_summariser/selection.py`)
 - The lean-judging rubric (currently `prompts/judge.md`)
 
 Every choice in these (thresholds, formulas, rules, rubric wording) is mine. Ask me one question at

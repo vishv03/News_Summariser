@@ -68,6 +68,23 @@ def test_new_items_stored_and_deduped_across_runs(
     assert outcome.new_count == 0
 
 
+def test_future_dates_are_replaced_by_first_seen_time(
+    dbs: tuple[sqlite3.Connection, sqlite3.Connection],
+) -> None:
+    state, cache = dbs
+    future = RSS.replace(b"Sat, 31 Oct 2026 05:00:00 GMT", b"Mon, 02 Nov 2026 05:00:00 GMT")
+    feed = httpx.MockTransport(lambda r: httpx.Response(200, content=future))
+
+    run_ingest([make_source("one")], state, cache, now=NOW, transport=feed)
+    # A later run must keep the first-seen time, not move it forward to its own clock.
+    run_ingest([make_source("one")], state, cache, now=NOW + timedelta(hours=1), transport=feed)
+
+    (published_at,) = cache.execute(
+        "SELECT published_at FROM articles WHERE title = 'Fresh story'"
+    ).fetchone()
+    assert datetime.fromisoformat(published_at) == NOW
+
+
 def test_conditional_headers_and_user_agent_sent(
     dbs: tuple[sqlite3.Connection, sqlite3.Connection],
 ) -> None:
