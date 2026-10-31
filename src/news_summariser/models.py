@@ -81,6 +81,8 @@ class SpendRecord(BaseModel):
     purpose: SpendPurpose
     usage: TokenUsage
     cost_usd: float = Field(ge=0)
+    # A --dry-run --live call: it counts toward the cap, but not toward the run estimate.
+    dev: bool = False
 
 
 Topic = Literal["world_politics", "economy", "science_tech_climate", "culture_society"]
@@ -183,8 +185,8 @@ class FeedHealth(BaseModel):
 
 # The fixed list in prompts/judge.md (ADR 0008), or "other:<word>" for anything else.
 FRAMING_TAG_PATTERN = (
-    r"^(conflict|human_cost|economic|security|responsibility|morality|legal|political_strategy"
-    r"|sovereignty|evidence|other:[a-z]+)$"
+    r"(conflict|human_cost|economic|security|responsibility|morality|legal|political_strategy"
+    r"|sovereignty|evidence|other:[a-z]+(?:[-_][a-z]+)*)"
 )
 
 
@@ -227,7 +229,7 @@ class ArticleJudgment(BaseModel):
             raise ValueError("a score needs a reason and a confidence")
         if not scored and self.confidence is not None:
             raise ValueError("insufficient has no confidence")
-        bad_tags = [t for t in self.framing_tags if not re.match(FRAMING_TAG_PATTERN, t)]
+        bad_tags = [t for t in self.framing_tags if not re.fullmatch(FRAMING_TAG_PATTERN, t)]
         if bad_tags:
             raise ValueError(f"unknown framing tags: {bad_tags}")
         return self

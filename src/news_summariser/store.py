@@ -208,12 +208,13 @@ def add_spend(conn: sqlite3.Connection, record: SpendRecord) -> None:
     """Record one paid API call."""
     u = record.usage
     conn.execute(
-        "INSERT INTO spend (at, model, purpose, input_tokens, output_tokens, cache_write_tokens,"
-        " cache_read_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO spend (at, model, purpose, dev, input_tokens, output_tokens,"
+        " cache_write_tokens, cache_read_tokens, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             _iso(record.at),
             record.model,
             record.purpose,
+            int(record.dev),
             u.input_tokens,
             u.output_tokens,
             u.cache_write_tokens,
@@ -229,11 +230,14 @@ def spend_since(conn: sqlite3.Connection, since: datetime) -> float:
     return row.fetchone()[0]
 
 
-def daily_spend(conn: sqlite3.Connection, since: datetime, until: datetime) -> dict[date, float]:
-    """Return USD spent per UTC day in [since, until); days with no spend are left out."""
+def daily_digest_spend(
+    conn: sqlite3.Connection, since: datetime, until: datetime
+) -> dict[date, float]:
+    """Return scheduled digest spend per UTC day in [since, until); days with none are left out."""
     # Stored times are all UTC (see _iso), so the first 10 characters are the UTC date.
     rows = conn.execute(
-        "SELECT substr(at, 1, 10), SUM(cost_usd) FROM spend WHERE at >= ? AND at < ? GROUP BY 1",
+        "SELECT substr(at, 1, 10), SUM(cost_usd) FROM spend"
+        " WHERE at >= ? AND at < ? AND dev = 0 AND purpose IN ('judge', 'summary') GROUP BY 1",
         (_iso(since), _iso(until)),
     )
     return {date.fromisoformat(day): total for day, total in rows}

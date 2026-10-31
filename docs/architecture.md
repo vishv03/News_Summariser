@@ -179,10 +179,12 @@ Messages use HTML formatting and stay under Telegram's 4,096-character limit.
   Each API call adds a row to a `spend` table in `state.db`: model, purpose, token counts and cost,
   from a price table in `config/settings.yaml`.
 - Before a run's first paid call, month-to-date spend plus an estimate of the run (the most
-  expensive day of the last 7, or $0.25 with no history) is checked against the cap. If it would
+  expensive day of digest spend in the last 7, or $0.25 with no history) is checked against the
+  cap. Each spend row is committed as soon as it's logged. If it would
   pass, the whole digest is headline-only and a warning is logged. Months and days are UTC.
-- `--dry-run` uses canned AI output and costs nothing. `--dry-run --live` makes real, logged calls
-  but posts nothing.
+- `--dry-run` uses canned AI output and costs nothing. `--dry-run --live` makes real calls and
+  posts nothing; its spend is written to the real `state.db`, marked as dev, so it counts toward
+  the cap but not the run estimate.
 - A hard spend limit is also set in the Anthropic console as a second safety net.
 - Prices are taken from the official docs, never guessed.
 

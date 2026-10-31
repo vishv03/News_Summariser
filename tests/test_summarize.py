@@ -1,16 +1,13 @@
 import json
 import sqlite3
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any, cast
 
 import pytest
-from anthropic import Anthropic
 from anthropic.types import Message
-from conftest import MakeArticle
+from conftest import FakeClient, MakeArticle, make_message
 
 from news_summariser import store, summarize
-from news_summariser.config import Settings, Source, load_settings, load_sources
+from news_summariser.config import Settings, Source
 from news_summariser.models import ArticleJudgment, JudgedStory, Story, StoryWriteup
 from news_summariser.selection import side_of
 
@@ -26,48 +23,7 @@ WRITEUP = {
 
 
 def _message(text: str, stop_reason: str = "end_turn") -> Message:
-    return Message.model_validate(
-        {
-            "id": "msg_test",
-            "type": "message",
-            "role": "assistant",
-            "model": "claude-sonnet-5-5",
-            "content": [{"type": "text", "text": text}],
-            "stop_reason": stop_reason,
-            "usage": {"input_tokens": 1_000, "output_tokens": 200},
-        }
-    )
-
-
-class FakeMessages:
-    def __init__(self, replies: list[Message]) -> None:
-        self.replies = replies
-        self.calls: list[dict[str, Any]] = []
-
-    def create(self, **kwargs: Any) -> Message:
-        self.calls.append(kwargs)
-        return self.replies.pop(0)
-
-
-class FakeClient:
-    def __init__(self, replies: list[Message]) -> None:
-        self.messages = FakeMessages(replies)
-
-
-@pytest.fixture
-def settings() -> Settings:
-    return load_settings()
-
-
-@pytest.fixture
-def sources() -> dict[str, Source]:
-    return {s.id: s for s in load_sources(include_disabled=True)}
-
-
-@pytest.fixture
-def state() -> sqlite3.Connection:
-    conn, _ = store.open_db(Path("unused"), "state", dry_run=True)
-    return conn
+    return make_message(text, stop_reason, input_tokens=1_000, output_tokens=200)
 
 
 def _first_on(side: str | None, sources: dict[str, Source]) -> str:
@@ -92,7 +48,7 @@ def _judged(story: Story, *, judged_hashes: list[str] | None = None) -> JudgedSt
 
 
 def _run(
-    replies: list[Message],
+    replies: list[Message | Exception],
     story: Story,
     judged: JudgedStory,
     state: sqlite3.Connection,
@@ -101,7 +57,7 @@ def _run(
 ) -> tuple[StoryWriteup | None, FakeClient]:
     client = FakeClient(replies)
     writeup = summarize.write_story(
-        cast(Anthropic, client), state, settings, "prompt", story, judged, sources, NOW
+        client.as_client(), state, settings, "prompt", story, judged, sources, NOW
     )
     return writeup, client
 
@@ -152,11 +108,22 @@ def test_not_judged_articles_are_left_out_and_their_side_dropped(
 def test_retry_then_fall_back_to_judge(
     story: Story, state: sqlite3.Connection, settings: Settings, sources: dict[str, Source]
 ) -> None:
-    replies = [_message("not json"), _message("{}", "max_tokens")]
+    replies: list[Message | Exception] = [_message("not json"), _message("{}", "max_tokens")]
     writeup, client = _run(replies, story, _judged(story), state, settings, sources)
     assert writeup is None
     assert len(client.messages.calls) == 2
     assert store.spend_since(state, NOW) == pytest.approx(0.008)  # both were billed
+
+
+def test_refusal_falls_back_without_retry(
+    story: Story, state: sqlite3.Connection, settings: Settings, sources: dict[str, Source]
+) -> None:
+    writeup, client = _run(
+        [_message("", "refusal")], story, _judged(story), state, settings, sources
+    )
+    assert writeup is None
+    assert len(client.messages.calls) == 1
+    assert store.spend_since(state, NOW) == pytest.approx(0.004)
 
 
 def test_nothing_judged_means_no_call(

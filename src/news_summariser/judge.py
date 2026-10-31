@@ -2,7 +2,6 @@
 
 import json
 import logging
-import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -10,9 +9,9 @@ from pathlib import Path
 import anthropic
 import pydantic
 from anthropic import Anthropic
-from anthropic.types import JSONOutputFormatParam
+from pydantic import BaseModel
 
-from news_summariser import budget
+from news_summariser import ai
 from news_summariser.config import Settings, Source
 from news_summariser.models import ArticleJudgment, JudgedStory, JudgeReply, Story
 
@@ -20,23 +19,23 @@ log = logging.getLogger(__name__)
 
 JUDGE_PROMPT_PATH = Path("prompts/judge.md")
 
-# Ample for ~15 articles plus medium-effort thinking; a reply cut off here is retried as bad.
-MAX_TOKENS = 16_000
-# One retry for a bad or incomplete reply (ADR 0008). The SDK already retries 429s and 5xx itself.
+# One retry for a bad or incomplete reply (ADR 0008). The SDK already retries 429s and 5xx itself,
+# and a refusal isn't retried: the same input would be refused again.
 ATTEMPTS = 2
 
-# Built once: the API constrains the reply to this schema, and pydantic then checks the rules a
-# schema can't express (see ArticleJudgment).
-_REPLY_FORMAT = JSONOutputFormatParam(
-    type="json_schema", schema=anthropic.transform_schema(JudgeReply.model_json_schema())
-)
+# The API constrains the reply to the full schema; pydantic then checks each article on its own,
+# so one broken judgment doesn't throw away the rest (see ArticleJudgment for the rules).
+_REPLY_FORMAT = ai.output_format(JudgeReply)
+
+
+class _LooseReply(BaseModel):
+    facts: str
+    judgments: list[dict[str, object]]
 
 
 def load_prompt(path: Path = JUDGE_PROMPT_PATH) -> str:
     """Read the rubric, without its maintainer comment."""
-    text = path.read_text(encoding="utf-8")
-    # The leading HTML comment is for people editing the file; the model doesn't need it.
-    return re.sub(r"\A\s*<!--.*?-->\s*", "", text, flags=re.DOTALL)
+    return ai.load_prompt(path)
 
 
 def _article_ids(story: Story) -> dict[str, str]:
@@ -63,51 +62,36 @@ def _user_message(story: Story, ids: dict[str, str], sources: dict[str, Source])
                 "summary": article.summary,
             }
         )
-    return json.dumps({"articles": articles}, ensure_ascii=False, indent=1)
+    # Compact: whitespace would be billed as input tokens on every call.
+    return json.dumps({"articles": articles}, ensure_ascii=False, separators=(",", ":"))
 
 
-def _ask(
-    client: Anthropic,
-    conn: sqlite3.Connection,
-    settings: Settings,
-    prompt: str,
-    message: str,
-    now: datetime,
-) -> JudgeReply | None:
-    """Make one judge call and log its cost; return None for a refusal or a bad reply."""
-    model = settings.models.judge
-    response = client.messages.create(
-        model=model.id,
-        max_tokens=MAX_TOKENS,
-        # Cached: every story in a run shares this system prompt, so calls after the first read
-        # it at a tenth of the price.
-        system=[{"type": "text", "text": prompt, "cache_control": {"type": "ephemeral"}}],
-        messages=[{"role": "user", "content": message}],
-        output_config={"effort": model.effort, "format": _REPLY_FORMAT},
-    )
-    # Logged before anything can fail, so every billed call reaches the spend table.
-    usage = budget.usage_from_api(response.usage)
-    budget.record_call(conn, settings, model.id, "judge", usage, now)
-    if response.stop_reason != "end_turn":
-        # refusal, or max_tokens (a cut-off reply can't be valid JSON).
-        log.warning("judge reply stopped early: %s", response.stop_reason)
-        return None
-    text = "".join(block.text for block in response.content if block.type == "text")
+def _parse(text: str, story_id: str) -> tuple[str, list[ArticleJudgment]] | None:
+    """Check the reply's shape, then each article on its own; None if the shape is wrong."""
     try:
-        return JudgeReply.model_validate_json(text)
+        reply = _LooseReply.model_validate_json(text)
     except pydantic.ValidationError as e:
-        log.warning("judge reply failed validation: %s", e)
+        log.warning("judge reply for story %s failed validation: %s", story_id, e)
         return None
+    judgments = []
+    for raw in reply.judgments:
+        try:
+            judgments.append(ArticleJudgment.model_validate(raw))
+        except pydantic.ValidationError as e:
+            log.warning("story %s: rejected judgment %s: %s", story_id, raw.get("article_id"), e)
+    return reply.facts, judgments
 
 
 def judge_story(
     client: Anthropic,
-    conn: sqlite3.Connection,
+    spend_conn: sqlite3.Connection,
     settings: Settings,
     prompt: str,
     story: Story,
     sources: dict[str, Source],
     now: datetime,
+    *,
+    dev: bool = False,
 ) -> JudgedStory:
     """Judge every article in one story; articles still unjudged after a retry are marked so."""
     ids = _article_ids(story)
@@ -116,16 +100,31 @@ def judge_story(
     facts: str | None = None
     for _ in range(ATTEMPTS):
         try:
-            reply = _ask(client, conn, settings, prompt, message, now)
+            text = ai.ask(
+                client,
+                spend_conn,
+                settings,
+                settings.models.judge,
+                "judge",
+                prompt,
+                message,
+                _REPLY_FORMAT,
+                now,
+                dev=dev,
+            )
+        except ai.Refused as e:
+            log.warning("judge refused story %s: %s", story.story_id, e)
+            break
         except anthropic.APIError as e:
             # Already retried by the SDK; another try now is unlikely to do better.
             log.warning("judge call failed for story %s: %s", story.story_id, e)
             break
-        if reply is not None:
+        parsed = _parse(text, story.story_id) if text is not None else None
+        if parsed is not None:
             # A retry fills gaps only: the first good answer per article (and for the facts) is
             # kept, and ids the judge invented are dropped.
-            facts = facts or reply.facts
-            for j in reply.judgments:
+            facts = facts or parsed[0]
+            for j in parsed[1]:
                 url_hash = ids.get(j.article_id)
                 if url_hash is not None and url_hash not in judgments:
                     judgments[url_hash] = j

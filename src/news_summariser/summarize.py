@@ -2,7 +2,6 @@
 
 import json
 import logging
-import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -10,9 +9,8 @@ from pathlib import Path
 import anthropic
 import pydantic
 from anthropic import Anthropic
-from anthropic.types import JSONOutputFormatParam
 
-from news_summariser import budget
+from news_summariser import ai
 from news_summariser.config import Settings, Source
 from news_summariser.models import JudgedStory, Story, StoryWriteup
 from news_summariser.selection import side_of
@@ -21,19 +19,16 @@ log = logging.getLogger(__name__)
 
 SUMMARY_PROMPT_PATH = Path("prompts/summary.md")
 
-MAX_TOKENS = 16_000
-# One retry, as for the judge; after that the story falls back to the judge's output (ADR 0008).
+# One retry for a bad reply, as for the judge (refusals aren't retried); after that the story
+# falls back to the judge's output (ADR 0008).
 ATTEMPTS = 2
 
-_WRITEUP_FORMAT = JSONOutputFormatParam(
-    type="json_schema", schema=anthropic.transform_schema(StoryWriteup.model_json_schema())
-)
+_WRITEUP_FORMAT = ai.output_format(StoryWriteup)
 
 
 def load_prompt(path: Path = SUMMARY_PROMPT_PATH) -> str:
     """Read the write-up prompt, without its maintainer comment."""
-    text = path.read_text(encoding="utf-8")
-    return re.sub(r"\A\s*<!--.*?-->\s*", "", text, flags=re.DOTALL)
+    return ai.load_prompt(path)
 
 
 def _user_message(story: Story, judged: JudgedStory, sources: dict[str, Source]) -> str:
@@ -55,39 +50,10 @@ def _user_message(story: Story, judged: JudgedStory, sources: dict[str, Source])
                 "take": j.take,
             }
         )
-    return json.dumps({"facts": judged.facts, "articles": articles}, ensure_ascii=False, indent=1)
-
-
-def _ask(
-    client: Anthropic,
-    conn: sqlite3.Connection,
-    settings: Settings,
-    prompt: str,
-    message: str,
-    now: datetime,
-) -> StoryWriteup | None:
-    """Make one write-up call and log its cost; return None for a refusal or a bad reply."""
-    model = settings.models.summary
-    response = client.messages.create(
-        model=model.id,
-        max_tokens=MAX_TOKENS,
-        # Cached: all ~8 stories in a run share this system prompt.
-        system=[{"type": "text", "text": prompt, "cache_control": {"type": "ephemeral"}}],
-        messages=[{"role": "user", "content": message}],
-        output_config={"effort": model.effort, "format": _WRITEUP_FORMAT},
+    # Compact: whitespace would be billed as input tokens on every call.
+    return json.dumps(
+        {"facts": judged.facts, "articles": articles}, ensure_ascii=False, separators=(",", ":")
     )
-    # Logged before anything can fail, so every billed call reaches the spend table.
-    usage = budget.usage_from_api(response.usage)
-    budget.record_call(conn, settings, model.id, "summary", usage, now)
-    if response.stop_reason != "end_turn":
-        log.warning("write-up reply stopped early: %s", response.stop_reason)
-        return None
-    text = "".join(block.text for block in response.content if block.type == "text")
-    try:
-        return StoryWriteup.model_validate_json(text)
-    except pydantic.ValidationError as e:
-        log.warning("write-up reply failed validation: %s", e)
-        return None
 
 
 def _drop_absent_sides(
@@ -109,13 +75,15 @@ def _drop_absent_sides(
 
 def write_story(
     client: Anthropic,
-    conn: sqlite3.Connection,
+    spend_conn: sqlite3.Connection,
     settings: Settings,
     prompt: str,
     story: Story,
     judged: JudgedStory,
     sources: dict[str, Source],
     now: datetime,
+    *,
+    dev: bool = False,
 ) -> StoryWriteup | None:
     """Write one story's comparison; None means render falls back to the judge's output."""
     if judged.facts is None or not judged.judgments:
@@ -124,12 +92,32 @@ def write_story(
     message = _user_message(story, judged, sources)
     for _ in range(ATTEMPTS):
         try:
-            writeup = _ask(client, conn, settings, prompt, message, now)
+            text = ai.ask(
+                client,
+                spend_conn,
+                settings,
+                settings.models.summary,
+                "summary",
+                prompt,
+                message,
+                _WRITEUP_FORMAT,
+                now,
+                dev=dev,
+            )
+        except ai.Refused as e:
+            log.warning("write-up refused for story %s: %s", judged.story_id, e)
+            return None
         except anthropic.APIError as e:
             log.warning("write-up call failed for story %s: %s", judged.story_id, e)
             return None
-        if writeup is not None:
-            return _drop_absent_sides(writeup, story, judged, sources)
+        if text is None:
+            continue
+        try:
+            writeup = StoryWriteup.model_validate_json(text)
+        except pydantic.ValidationError as e:
+            log.warning("write-up for story %s failed validation: %s", judged.story_id, e)
+            continue
+        return _drop_absent_sides(writeup, story, judged, sources)
     log.warning("no write-up for story %s; falling back to the judge's output", judged.story_id)
     return None
 

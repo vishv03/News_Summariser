@@ -81,7 +81,8 @@ Give 1–3 tags, the most prominent first. The piece mainly presents the story a
 - `political_strategy`: who gains politically, such as polls, tactics or the horse race
 - `sovereignty`: national interest, independence, outside influence or pressure
 - `evidence`: data, science, expert findings
-- `other:<word>`: anything else, in one lowercase English word
+- `other:<word>`: anything else, in one lowercase English word, or a term joined with `-` or `_`
+  (for example `other:public_health`)
 
 Framing tags are given even when the lean is `insufficient`.
 

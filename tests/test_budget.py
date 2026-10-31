@@ -7,28 +7,24 @@ import pytest
 from anthropic.types import Usage
 
 from news_summariser import budget, store
-from news_summariser.config import Settings, load_settings
-from news_summariser.models import SpendRecord, TokenUsage
+from news_summariser.config import Settings
+from news_summariser.models import SpendPurpose, SpendRecord, TokenUsage
 
 # Mid-month and mid-day UTC, so "this month" and "today" both have room either side.
 NOW = datetime(2026, 10, 15, 12, tzinfo=UTC)
 
 
-@pytest.fixture
-def settings() -> Settings:
-    return load_settings()
-
-
-@pytest.fixture
-def state() -> sqlite3.Connection:
-    conn, _ = store.open_db(Path("unused"), "state", dry_run=True)
-    return conn
-
-
-def _spend(conn: sqlite3.Connection, at: datetime, cost: float) -> None:
+def _spend(
+    conn: sqlite3.Connection,
+    at: datetime,
+    cost: float,
+    *,
+    purpose: SpendPurpose = "judge",
+    dev: bool = False,
+) -> None:
     usage = TokenUsage(input_tokens=1, output_tokens=1)
     record = SpendRecord(
-        at=at, model="claude-haiku-5-5", purpose="judge", usage=usage, cost_usd=cost
+        at=at, model="claude-haiku-5-5", purpose=purpose, usage=usage, cost_usd=cost, dev=dev
     )
     store.add_spend(conn, record)
 
@@ -83,6 +79,27 @@ def test_estimate_ignores_today_and_days_beyond_the_window(
     _spend(state, NOW - timedelta(days=settings.budget.estimate_days + 1), 9.0)
     _spend(state, NOW - timedelta(days=1), 0.08)
     assert budget.run_estimate(state, settings, NOW) == pytest.approx(0.08)
+
+
+def test_estimate_ignores_dev_runs_and_breaking_alerts(
+    state: sqlite3.Connection, settings: Settings
+) -> None:
+    _spend(state, NOW - timedelta(days=1), 0.75, dev=True)  # a day of --live testing
+    _spend(state, NOW - timedelta(days=2), 0.50, purpose="breaking")
+    _spend(state, NOW - timedelta(days=2), 0.04, purpose="summary")
+    assert budget.run_estimate(state, settings, NOW) == pytest.approx(0.04)
+    # ...but every real cent still counts toward the cap.
+    assert budget.month_to_date(state, NOW) == pytest.approx(1.29)
+
+
+def test_record_call_commits_at_once(tmp_path: Path, settings: Settings) -> None:
+    path = tmp_path / "state.db"
+    conn, _ = store.open_db(path, "state")
+    usage = TokenUsage(input_tokens=1_000, output_tokens=0)
+    budget.record_call(conn, settings, "claude-haiku-5-5", "judge", usage, NOW)
+    # Another connection sees the row, so a crash in this one couldn't roll it back.
+    other, _ = store.open_db(path, "state")
+    assert store.spend_since(other, NOW) == pytest.approx(0.0001)
 
 
 def test_can_afford_run_under_cap(state: sqlite3.Connection, settings: Settings) -> None:

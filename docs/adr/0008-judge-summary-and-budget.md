@@ -124,6 +124,20 @@ or all of the cap on its own.
   "what differs" sentence. *Rejected:* a headline-only story (wastes judging already paid for), and
   failing the whole run.
 
+### After code review (decided by the owner)
+- **Spend rows are committed as soon as each call is logged**, so a crash later in the run can't
+  roll back the record of money already spent.
+- **The judge's reply is checked article by article.** One broken judgment no longer throws away
+  the rest; only the broken article counts as missing, and the retry fills just that gap.
+- **`other:` tags** may be one lowercase word or a term joined with `-` or `_`.
+- **Refusals aren't retried**: the same input would almost always be refused again, and both calls
+  would be billed. Bad, cut-off and incomplete replies are still retried once.
+- **`--dry-run --live` spend goes straight to the real `state.db`** through a separate connection
+  committed per call; everything else in a dry run stays in the in-memory copy.
+- **The run estimate counts only scheduled digest spend** (judge and summary, not `--live` test
+  calls or breaking alerts), via a `dev` flag on each spend row. All spend still counts toward the
+  monthly cap.
+
 ### Paid calls during `--dry-run`
 - **Free by default, real with `--live` (chosen):** `--dry-run` uses canned judge and summary output,
   so routine checks after every pipeline change cost nothing. `--dry-run --live` makes real calls and

@@ -43,14 +43,17 @@ def record_call(
     purpose: SpendPurpose,
     usage: TokenUsage,
     now: datetime,
+    *,
+    dev: bool = False,
 ) -> float:
-    """Cost one API call, store it in the spend table and return its cost."""
+    """Cost one API call, store and commit it in the spend table, and return its cost."""
     # A KeyError here would mean the money was spent but never logged; load_settings() checks
     # every configured model has a price, so this only fails for a model outside settings.yaml.
     cost = call_cost(usage, settings.prices[model])
-    store.add_spend(
-        conn, SpendRecord(at=now, model=model, purpose=purpose, usage=usage, cost_usd=cost)
-    )
+    record = SpendRecord(at=now, model=model, purpose=purpose, usage=usage, cost_usd=cost, dev=dev)
+    store.add_spend(conn, record)
+    # Committed at once: the money is spent, so a crash later in the run mustn't roll it back.
+    conn.commit()
     return cost
 
 
@@ -64,10 +67,14 @@ def month_to_date(conn: sqlite3.Connection, now: datetime) -> float:
 
 
 def run_estimate(conn: sqlite3.Connection, settings: Settings, now: datetime) -> float:
-    """Estimate today's run: the most expensive of the last N UTC days, or a fixed amount."""
+    """Estimate today's digest: its most expensive recent UTC day, or a fixed amount."""
     today = _day_start(now)
-    # Whole days before today only: today's total is partial until the run has happened.
-    days = store.daily_spend(conn, today - timedelta(days=settings.budget.estimate_days), today)
+    # Whole days before today only: today's total is partial until the run has happened. Only
+    # scheduled digest spend counts, so a day of dev test runs or breaking alerts can't inflate
+    # the estimate; all spend still counts in month_to_date.
+    days = store.daily_digest_spend(
+        conn, today - timedelta(days=settings.budget.estimate_days), today
+    )
     if not days:
         return settings.budget.estimate_without_history_usd
     return max(days.values())
