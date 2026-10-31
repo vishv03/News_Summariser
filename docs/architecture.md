@@ -47,9 +47,10 @@ between runs with `actions/cache`, so outlets' text never enters the public repo
 | `ingest.py` | Fetch feeds, clean up URLs, dedupe, record feed health | Claude |
 | `store.py` | SQLite access: articles, stories, posts, feed health, spend | Claude |
 | `gdelt.py` | Global coverage spikes for breaking news | Claude |
-| `cluster.py` | Group articles about the same event, across languages | **Project owner** |
-| `select.py` | Rank stories, pick blindspots, decide breaking | **Project owner** |
-| `prompts/judge.md` | The lean-judging rubric ([ADR 0002](adr/0002-lean-judging-ai-with-outlet-baseline.md)) | **Project owner** |
+| `embed.py` | Turn articles into vectors, reusing cached ones ([ADR 0006](adr/0006-clustering-embeddings-and-stories.md)) | Claude |
+| `cluster.py` | Group articles about the same event, across languages | **Project owner decides; Claude writes** |
+| `select.py` | Rank stories, pick blindspots, decide breaking | **Project owner decides; Claude writes** |
+| `prompts/judge.md` | The lean-judging rubric ([ADR 0002](adr/0002-lean-judging-ai-with-outlet-baseline.md)) | **Project owner decides; Claude writes** |
 | `judge.py`, `summarize.py` | Call the AI models ([ADR 0003](adr/0003-ai-models-haiku-and-sonnet.md)) | Claude |
 | `budget.py` | Track spend and enforce the cap | Claude |
 | `render.py`, `telegram.py` | Build and send messages | Claude |
@@ -88,7 +89,7 @@ browser-like one but accepted the honest one.
 - PyTorch is pinned to the CPU-only build: free Actions runners have no GPU, and the model is small.
 - Embeddings are stored in `cache.db` with the model name, so each run embeds only new articles.
 - Articles are grouped with agglomerative clustering (cosine distance, average linkage, one
-  distance threshold), written by the project owner.
+  distance threshold); every choice in it is the project owner's.
 - Each `Story` has a `story_id` (its earliest article's `url_hash`), its articles, and derived
   properties. Region and lean are looked up from `sources.yaml`, never copied.
 
@@ -143,9 +144,9 @@ Messages use HTML formatting and stay under Telegram's 4,096-character limit.
 ## Build order
 0. ✅ Setup: uv scaffold, CLAUDE.md, ADRs 0001–0004, hooks, subagents, `/adr`1. ✅ Sources: `config/sources.yaml`
 2. Ingest + store + feed health (ADR 0005)
-3. Cluster *(owner-written)*
-4. Select *(owner-written)*
-5. Judge + summarize + budget (rubric owner-written)
+3. Cluster *(owner-decided)*
+4. Select *(owner-decided)*
+5. Judge + summarize + budget (rubric owner-decided)
 6. Render + Telegram + `digest.yml`: **v1 ships**
 7. GDELT + `breaking.yml`: **v1.1**
 8. Always-on bot on student cloud credits, with `/more`, `/topic`, `/sources`: **v2**

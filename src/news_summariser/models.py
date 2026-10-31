@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # An Issue opens only after this many unhealthy runs in a row AND this long unhealthy (ADR 0005).
 # Runs are every 20 minutes, so 3 runs alone would be one hour: too twitchy for short outages.
@@ -22,6 +22,32 @@ class Article(BaseModel):
     # The feed's date, or when we first saw the item if the feed gives none.
     published_at: datetime
     fetched_at: datetime
+
+
+class Story(BaseModel):
+    """A group of articles about the same event, as returned by clustering (ADR 0006)."""
+
+    # Region, lean and ownership are looked up from sources.yaml by source_id, never copied here,
+    # so a changed baseline can't leave stale values behind.
+    articles: list[Article] = Field(min_length=1)
+
+    @property
+    def story_id(self) -> str:
+        """The earliest article's url_hash, so the id stays the same across runs."""
+        # url_hash breaks ties, so two articles published in the same second always give one answer.
+        return min(self.articles, key=lambda a: (a.published_at, a.url_hash)).url_hash
+
+    @property
+    def source_ids(self) -> set[str]:
+        return {a.source_id for a in self.articles}
+
+    @property
+    def first_published(self) -> datetime:
+        return min(a.published_at for a in self.articles)
+
+    @property
+    def last_published(self) -> datetime:
+        return max(a.published_at for a in self.articles)
 
 
 class FetchOutcome(BaseModel):

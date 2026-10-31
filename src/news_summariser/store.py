@@ -8,6 +8,8 @@ from importlib import resources
 from pathlib import Path
 from typing import Literal
 
+import numpy as np
+
 from news_summariser.models import Article, FeedHealth
 
 STATE_PATH = Path("data/state.db")
@@ -106,6 +108,55 @@ def add_articles(conn: sqlite3.Connection, articles: Iterable[Article]) -> None:
     )
 
 
+def recent_articles(conn: sqlite3.Connection, since: datetime) -> list[Article]:
+    """Return cached articles published at or after `since`, oldest first."""
+    rows = conn.execute(
+        "SELECT url_hash, source_id, url, title, summary, language, published_at, fetched_at"
+        " FROM articles WHERE published_at >= ? ORDER BY published_at, url_hash",
+        (_iso(since),),
+    )
+    return [
+        Article(
+            url_hash=r[0],
+            source_id=r[1],
+            url=r[2],
+            title=r[3],
+            summary=r[4],
+            language=r[5],
+            published_at=datetime.fromisoformat(r[6]),
+            fetched_at=datetime.fromisoformat(r[7]),
+        )
+        for r in rows
+    ]
+
+
+# Fixed byte order, so a cache.db restored on another machine reads back the same numbers.
+_VECTOR_DTYPE = np.dtype("<f4")
+
+
+def get_embeddings(
+    conn: sqlite3.Connection, hashes: Iterable[str], model: str
+) -> dict[str, np.ndarray]:
+    """Return stored vectors made by `model`; missing or stale ones are left out."""
+    hashes = list(hashes)
+    if not hashes:
+        return {}
+    placeholders = ",".join("?" * len(hashes))
+    rows = conn.execute(
+        f"SELECT url_hash, vector FROM embeddings WHERE model = ? AND url_hash IN ({placeholders})",
+        [model, *hashes],
+    )
+    return {h: np.frombuffer(blob, dtype=_VECTOR_DTYPE) for h, blob in rows}
+
+
+def save_embeddings(conn: sqlite3.Connection, model: str, vectors: dict[str, np.ndarray]) -> None:
+    """Insert or replace vectors; replacing is how a stale model's vector gets updated."""
+    conn.executemany(
+        "INSERT OR REPLACE INTO embeddings (url_hash, model, vector) VALUES (?, ?, ?)",
+        [(h, model, v.astype(_VECTOR_DTYPE).tobytes()) for h, v in vectors.items()],
+    )
+
+
 _HEALTH_COLUMNS = list(FeedHealth.model_fields)
 
 
@@ -129,8 +180,10 @@ def save_health(conn: sqlite3.Connection, health: FeedHealth) -> None:
 
 
 def prune(state: sqlite3.Connection, cache: sqlite3.Connection, now: datetime) -> None:
-    """Delete seen URLs older than 30 days and cached articles older than 48 hours."""
+    """Delete seen URLs older than 30 days, and cached articles and their vectors after 48 hours."""
     state.execute(
         "DELETE FROM seen_urls WHERE first_seen_at < ?", (_iso(now - SEEN_URL_RETENTION),)
     )
     cache.execute("DELETE FROM articles WHERE published_at < ?", (_iso(now - ARTICLE_RETENTION),))
+    # Keyed to articles rather than by age, so a vector never outlives the text it came from.
+    cache.execute("DELETE FROM embeddings WHERE url_hash NOT IN (SELECT url_hash FROM articles)")
