@@ -27,7 +27,8 @@ goes to the AI. The repo is a public portfolio project, and the owner has GitHub
 ## Decision
 v1 runs on GitHub Actions in a public repo: `digest.yml` daily (scheduled about 15 minutes early to
 absorb start delays) and `breaking.yml` every 20 minutes. State lives in `data/state.db` (article
-URLs and hashes only), committed back by the workflow. Because Actions can't serve buttons that
+URLs and hashes only), committed back by the workflow. (Article text lives in a separate,
+uncommitted `data/cache.db`; see [ADR 0005](0005-ingest-store-and-feed-health.md).) Because Actions can't serve buttons that
 call back to us, v1 uses URL buttons that open articles, with no bot commands.
 
 v2 adds an always-on, Dockerised bot on a cloud server paid for by GitHub Student Pack credits

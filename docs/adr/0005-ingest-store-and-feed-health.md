@@ -78,18 +78,37 @@ workflow, so it has to stay small and diff cleanly.
 - `config/sources.yaml` is loaded with **PyYAML** and validated with **pydantic**.
 - State uses stdlib **sqlite3** with plain SQL. Schema changes are numbered files in
   `migrations/`. `PRAGMA user_version` records the last one applied, and missing ones run at startup.
+- State is split into two files, so outlets' text never enters the public repo:
+  - `data/state.db` is committed (ADR 0004). It holds only small records: cleaned URL hashes for
+    dedupe, feed health and posted stories.
+  - `data/cache.db` is gitignored and kept between runs with `actions/cache`. It holds article
+    titles and RSS summaries, pruned to 48 hours. If the cache is evicted, the next run refills it
+    from the feeds.
 - Ingest stores the RSS title and summary only. Full text is fetched in step 5, only for articles
   being judged.
+- Requests send `If-None-Match` / `If-Modified-Since`, so unchanged feeds reply 304. A 304 counts
+  as healthy.
+- The CLI uses stdlib **argparse**: `python -m news_summariser ingest [--dry-run]`.
 - Everything is keyed by source `id`, which is never renamed.
 - Article URLs are cleaned up before dedupe: tracking parameters removed, host lowercased,
   fragment dropped.
-- Each run records per-source health in `state.db`. A run is **unhealthy** if there's an error,
-  0 items, or nothing new in 48 hours. After 3 unhealthy runs in a row, the workflow opens a GitHub
-  Issue for that feed and closes it when the feed recovers. Redirects are followed and flagged in
+- Each run records each source's current health in `state.db`, one row per source with no
+  per-run log. A run is **unhealthy** if there's an error, 0 items, or nothing new in 48 hours.
+  "Nothing new" uses the newest item's own date (or the time we first saw it, for undated items),
+  not whether its URL is new to us. Otherwise a dead feed's old items would look fresh on the
+  first run, and again every time their dedupe rows are pruned after 30 days.
+- Responses over 5 MB are abandoned and recorded as a problem. Real feeds are under 1 MB, and
+  reading a broken or hijacked URL whole could exhaust the runner's memory.
+  An Issue opens only after 3 unhealthy runs in a row **and** at least 6 hours unhealthy. With
+  runs every 20 minutes, 3 runs alone would be one hour, and short outages would open noisy
+  Issues. The workflow opens a GitHub Issue for that feed and closes it when the feed recovers. Redirects are followed and flagged in
   the issue. `sources.yaml` is never edited automatically.
 
 ## Consequences
 - Four new runtime packages: httpx, feedparser, PyYAML, pydantic.
+- ADR 0004's "URLs and hashes only" rule still holds for `state.db`. Article text lives in
+  `cache.db`, which is never committed. If the cache is evicted just before a digest, that digest
+  sees only what the feeds still list.
 - Every query maps rows to pydantic models by hand, which means more boilerplate than an ORM.
 - Feeds that give only a headline may cluster less well until full text arrives in step 5.
 - `state.db` is binary, so PR diffs aren't readable, and two runs at once would conflict. We rely

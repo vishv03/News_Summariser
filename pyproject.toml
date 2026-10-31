@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Daily Telegram digest comparing how left, right and international outlets frame the same news."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "feedparser>=6.0.14",
+    "httpx>=0.28.1",
+    "pydantic>=2.14.2",
+    "pyyaml>=6.0.3",
+]
 
 [project.scripts]
 news-summariser = "news_summariser:main"
@@ -19,6 +24,7 @@ dev = [
     "pyright>=1.1.414",
     "pytest>=9.2.0",
     "ruff>=0.17.3",
+    "types-pyyaml>=6.0.12.20261030",
 ]
 
 [tool.ruff]

@@ -1,2 +1,3 @@
-def main() -> None:
-    print("Hello from news-summariser!")
+from news_summariser.cli import main
+
+__all__ = ["main"]

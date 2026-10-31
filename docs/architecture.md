@@ -13,8 +13,9 @@ the same news story, plus conservative breaking-news alerts. Each choice below l
 flowchart LR
     RSS["RSS feeds<br/>config/sources.yaml"] --> ING[ingest]
     GDELT["GDELT<br/>global spikes"] --> BRK
-    ING --> DB[("SQLite<br/>data/state.db")]
-    DB --> CL["cluster<br/>multilingual embeddings"]
+    ING --> DB[("state.db<br/>committed: hashes,<br/>health, posts")]
+    ING --> CACHE[("cache.db<br/>actions/cache:<br/>article text, 48 h")]
+    CACHE --> CL["cluster<br/>multilingual embeddings"]
     CL --> SEL["select<br/>top 5 + 3 blindspots"]
     CL --> BRK["breaking check<br/>every 20 min"]
     SEL --> JDG["judge lean<br/>Haiku 5.5"]
@@ -32,6 +33,11 @@ Two GitHub Actions schedules share one pipeline ([ADR 0004](adr/0004-hosting-git
 | `breaking.yml` | Every 20 minutes | Ingest + cluster + breaking check → 🚨 Breaking (rarely posts) |
 
 Both jobs share a `concurrency` group so they never write `state.db` at the same time.
+
+State is split in two ([ADR 0005](adr/0005-ingest-store-and-feed-health.md)). `data/state.db` is
+committed and holds only small records: URL hashes, feed health and posted stories.
+`data/cache.db` holds article titles and RSS summaries for 48 hours. It is gitignored and kept
+between runs with `actions/cache`, so outlets' text never enters the public repo.
 
 ## Modules
 
