@@ -27,6 +27,8 @@
 #   reliability_note only where Media Bias/Fact Check rates factual reporting Mixed or lower,
 #                    whatever the outlet's lean. Passed to the AI judge.
 #   note             why this baseline, and what the AI judge should know
+#   enabled          optional, default true. false stops fetching but keeps the entry and its
+#                    history (keyed on id). Add a comment saying why and when.
 #
 # How baselines were set
 #   us / uk:  guided by AllSides, Ad Fontes Media and Media Bias/Fact Check.
@@ -438,6 +440,24 @@ sources:
     gov_aligned: true
     reliability_note: MBFC rates factual reporting Mixed and lists it as a Questionable Source.
     note: Run by the Chinese Communist Party's People's Daily; shows the official Beijing line.
+    # 2026-10-31: the only feed is a sparse Outbrain widget list with nothing new since 9 Oct,
+    # and no other official feed exists. Replaced by cgtn until a real feed appears.
+    enabled: false
+
+  - id: cgtn
+    name: CGTN
+    url: https://www.cgtn.com/subscribe/rss/section/china.xml
+    region: east_asia
+    country: CN
+    language: en
+    lean_axis: local
+    baseline_lean: 2
+    ownership: state
+    gov_aligned: true
+    reliability_note: MBFC rates factual reporting Mixed and lists it as a Questionable Source.
+    note: >-
+      International arm of state broadcaster CCTV, funded by the Chinese government; shows the
+      official Beijing line, in a more measured tone than Global Times. China section feed.
 
   - id: asahi
     name: Asahi Shimbun

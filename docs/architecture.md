@@ -61,6 +61,10 @@ Ownership is `private`, `public_service` (publicly funded with legal editorial i
 `state` (🏛). A `reliability_note` is added only where Media Bias/Fact Check rates factual
 reporting Mixed or lower, whatever the lean. Full field definitions are in the file header.
 
+A source whose feed dies is turned off with `enabled: false`, not deleted, so its reasoning and
+history stay keyed on its id. Global Times was turned off on 2026-10-31 because its only feed had
+gone stale, and CGTN took its place.
+
 Feeds are always fetched with an honest User-Agent naming the project. Several sites blocked a
 browser-like one but accepted the honest one.
 

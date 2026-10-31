@@ -30,6 +30,9 @@ class Source(BaseModel):
     gov_aligned: bool
     reliability_note: str | None = None
     note: str
+    # Turning a source off instead of deleting it keeps its entry, reasoning and history keyed
+    # on its id, so it can be switched back on if its feed recovers.
+    enabled: bool = True
 
 
 class SourcesFile(BaseModel):
@@ -50,8 +53,9 @@ class SourcesFile(BaseModel):
         return sources
 
 
-def load_sources(path: Path = SOURCES_PATH) -> list[Source]:
-    """Read sources.yaml and return validated sources."""
+def load_sources(path: Path = SOURCES_PATH, *, include_disabled: bool = False) -> list[Source]:
+    """Read sources.yaml and return validated sources, enabled ones only unless asked."""
     with path.open(encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    return SourcesFile.model_validate(data).sources
+    sources = SourcesFile.model_validate(data).sources
+    return sources if include_disabled else [s for s in sources if s.enabled]

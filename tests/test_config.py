@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from news_summariser.config import SourcesFile, load_sources
@@ -19,9 +22,17 @@ SOURCE = {
 
 
 def test_real_sources_file_loads() -> None:
-    sources = load_sources()
+    sources = load_sources(include_disabled=True)
     assert len(sources) >= 30
     assert len({s.id for s in sources}) == len(sources)
+
+
+def test_disabled_sources_skipped_unless_asked(tmp_path: Path) -> None:
+    path = tmp_path / "sources.yaml"
+    off = {**SOURCE, "id": "off", "enabled": False}
+    path.write_text(yaml.safe_dump({"sources": [SOURCE, off]}), encoding="utf-8")
+    assert [s.id for s in load_sources(path)] == ["example"]
+    assert [s.id for s in load_sources(path, include_disabled=True)] == ["example", "off"]
 
 
 def test_duplicate_ids_rejected() -> None:
