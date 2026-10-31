@@ -12,6 +12,11 @@ from news_summariser.models import Article
 # Changing this needs an ADR: it decides which articles count as the same event. Stored vectors
 # carry the model name, so a change recomputes them instead of mixing old and new.
 MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+# The Hugging Face commit the 0.55 threshold was tested on (2026-10-31). Pinned so new weights
+# pushed under the same name can't arrive unnoticed and be compared with cached vectors.
+MODEL_REVISION = "e8f8c211226b894fcb81acc59f3b34ba3efd5f42"
+# What stored vectors are tagged with: a change to either part marks them stale.
+MODEL_KEY = f"{MODEL_NAME}@{MODEL_REVISION}"
 
 
 class Encoder(Protocol):
@@ -29,14 +34,14 @@ def _load_model() -> Encoder:
     # shouldn't pay for that.
     from sentence_transformers import SentenceTransformer
 
-    return SentenceTransformer(MODEL_NAME, device="cpu")
+    return SentenceTransformer(MODEL_NAME, revision=MODEL_REVISION, device="cpu")
 
 
 def embed_articles(
     conn: sqlite3.Connection, articles: list[Article], model: Encoder | None = None
 ) -> dict[str, np.ndarray]:
     """Return a unit-length vector for every article, embedding only those not already cached."""
-    vectors = store.get_embeddings(conn, (a.url_hash for a in articles), MODEL_NAME)
+    vectors = store.get_embeddings(conn, (a.url_hash for a in articles), MODEL_KEY)
     missing = [a for a in articles if a.url_hash not in vectors]
     if missing:
         model = model or _load_model()
@@ -46,6 +51,6 @@ def embed_articles(
             dtype=np.float32,
         )
         new = {a.url_hash: v for a, v in zip(missing, encoded, strict=True)}
-        store.save_embeddings(conn, MODEL_NAME, new)
+        store.save_embeddings(conn, MODEL_KEY, new)
         vectors.update(new)
     return vectors

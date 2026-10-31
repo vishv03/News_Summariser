@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # An Issue opens only after this many unhealthy runs in a row AND this long unhealthy (ADR 0005).
 # Runs are every 20 minutes, so 3 runs alone would be one hour: too twitchy for short outages.
@@ -25,11 +25,15 @@ class Article(BaseModel):
 
 
 class Story(BaseModel):
-    """A group of articles about the same event, as returned by clustering (ADR 0006)."""
+    """A group of articles about the same story, as returned by clustering (ADR 0006)."""
+
+    # Frozen with a tuple, so a story can't be emptied after it's built: story_id and the dates
+    # would then fail on min()/max(). Code that narrows a story builds a new one instead.
+    model_config = ConfigDict(frozen=True)
 
     # Region, lean and ownership are looked up from sources.yaml by source_id, never copied here,
     # so a changed baseline can't leave stale values behind.
-    articles: list[Article] = Field(min_length=1)
+    articles: tuple[Article, ...] = Field(min_length=1)
 
     @property
     def story_id(self) -> str:

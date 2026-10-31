@@ -19,7 +19,7 @@ def cluster(articles: list[Article], vectors: dict[str, np.ndarray]) -> list[Sto
         return []
     if len(articles) == 1:
         # The clusterer needs at least two samples.
-        return [Story(articles=articles)]
+        return [Story(articles=tuple(articles))]
 
     matrix = np.stack([vectors[a.url_hash] for a in articles])
     labels = AgglomerativeClustering(
@@ -36,4 +36,4 @@ def cluster(articles: list[Article], vectors: dict[str, np.ndarray]) -> list[Sto
     for article, label in zip(articles, labels, strict=True):
         groups.setdefault(int(label), []).append(article)
     # Sorted so the same input always gives the same output order; select.py does the ranking.
-    return sorted((Story(articles=g) for g in groups.values()), key=lambda s: s.story_id)
+    return sorted((Story(articles=tuple(g)) for g in groups.values()), key=lambda s: s.story_id)

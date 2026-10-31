@@ -105,17 +105,22 @@ tools, storage and interface around it.
   best. On 1,870 real articles (31 Oct 2026), 0.55 kept the Israel election as one story
   (48 articles, 13 outlets); 0.60 split it in two, and 0.50 merged unrelated Korea news.
   Clustering all of them took under half a second.
+- **The model is pinned to one Hugging Face commit** (`e8f8c21…`, the one the threshold was tested
+  on), so new weights pushed under the same name can't arrive unnoticed.
 - **Storage:** embeddings live in `cache.db` (migration `0002`), keyed by `url_hash`, with a `model`
-  column, and are pruned with the articles at 48 hours.
+  column holding the model name and commit, and are pruned with the articles at 48 hours.
 - **Input text:** title + summary, joined, with the model cutting at 128 tokens.
 - **Output:** `Story` holds a `story_id` (the `url_hash` of its earliest article), the full
-  `Article` list, and derived properties.
+  `Article` list, and derived properties. It is frozen, so code that narrows a story builds a new
+  one instead of emptying it.
 
 ## Consequences
 - Two new runtime packages: sentence-transformers (with PyTorch, CPU-only) and scikit-learn.
   `torch` is also listed directly in `pyproject.toml`, as in uv's own CPU-only example, because
   uv's docs don't say whether `[tool.uv.sources]` applies to packages we don't list ourselves.
   The lockfile resolves Linux and Windows to `torch 2.15.0+cpu`, with no NVIDIA packages.
+  `numpy` is also listed directly: both packages already depend on it, but our own code imports
+  it (vectors are stored as bytes), so we declare it rather than rely on their choices.
 - The model weights are about 471 MB. Actions must cache them, or every run downloads them again.
 - `cache.db` gets migration `0002`.
 - Clustering compares every pair of articles: about 9M distances at 3k articles. That fits in memory

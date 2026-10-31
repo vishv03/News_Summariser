@@ -3,7 +3,7 @@
 import sqlite3
 from collections.abc import Iterable
 from contextlib import closing
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from importlib import resources
 from pathlib import Path
 from typing import Literal
@@ -24,7 +24,9 @@ Kind = Literal["state", "cache"]
 
 
 def _iso(dt: datetime) -> str:
-    return dt.isoformat(timespec="seconds")
+    # Times are compared as text in SQL, which is only correct if they all share one offset: an IST
+    # "07:00+05:30" would otherwise sort after a UTC "06:00+00:00" that is 4.5 hours later.
+    return dt.astimezone(UTC).isoformat(timespec="seconds")
 
 
 def _migrations(kind: Kind) -> list[tuple[int, str]]:
@@ -108,26 +110,17 @@ def add_articles(conn: sqlite3.Connection, articles: Iterable[Article]) -> None:
     )
 
 
+_ARTICLE_COLUMNS = list(Article.model_fields)
+
+
 def recent_articles(conn: sqlite3.Connection, since: datetime) -> list[Article]:
     """Return cached articles published at or after `since`, oldest first."""
     rows = conn.execute(
-        "SELECT url_hash, source_id, url, title, summary, language, published_at, fetched_at"
-        " FROM articles WHERE published_at >= ? ORDER BY published_at, url_hash",
+        f"SELECT {', '.join(_ARTICLE_COLUMNS)} FROM articles"
+        " WHERE published_at >= ? ORDER BY published_at, url_hash",
         (_iso(since),),
     )
-    return [
-        Article(
-            url_hash=r[0],
-            source_id=r[1],
-            url=r[2],
-            title=r[3],
-            summary=r[4],
-            language=r[5],
-            published_at=datetime.fromisoformat(r[6]),
-            fetched_at=datetime.fromisoformat(r[7]),
-        )
-        for r in rows
-    ]
+    return [Article.model_validate(dict(zip(_ARTICLE_COLUMNS, r, strict=True))) for r in rows]
 
 
 # Fixed byte order, so a cache.db restored on another machine reads back the same numbers.

@@ -1,12 +1,12 @@
 import sqlite3
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta, timezone
 from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import NOW, MakeArticle
 
 from news_summariser import store
-from news_summariser.models import Article
 from news_summariser.store import open_db
 
 
@@ -42,22 +42,6 @@ def test_failed_migration_rolls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     assert conn.execute("PRAGMA user_version").fetchone()[0] == 0
 
 
-NOW = datetime(2026, 10, 31, 12, tzinfo=UTC)
-
-
-def _article(url_hash: str, published_at: datetime) -> Article:
-    return Article(
-        url_hash=url_hash,
-        source_id="bbc",
-        url=f"https://example.com/{url_hash}",
-        title="Title",
-        summary="Summary",
-        language="en",
-        published_at=published_at,
-        fetched_at=published_at,
-    )
-
-
 def test_embeddings_round_trip_and_stale_model_is_skipped() -> None:
     conn, _ = open_db(Path("unused"), "cache", dry_run=True)
     vector = np.arange(384, dtype=np.float32) / 384
@@ -75,10 +59,11 @@ def test_embeddings_round_trip_and_stale_model_is_skipped() -> None:
     assert list(store.get_embeddings(conn, ["h1"], "model-b")) == ["h1"]
 
 
-def test_prune_drops_vectors_whose_article_is_gone() -> None:
+def test_prune_drops_vectors_whose_article_is_gone(make_article: MakeArticle) -> None:
     state, _ = open_db(Path("unused"), "state", dry_run=True)
     cache, _ = open_db(Path("unused"), "cache", dry_run=True)
-    store.add_articles(cache, [_article("old", NOW - timedelta(days=3)), _article("new", NOW)])
+    old = make_article("old", published_at=NOW - timedelta(days=3))
+    store.add_articles(cache, [old, make_article("new")])
     vector = np.zeros(384, dtype=np.float32)
     store.save_embeddings(cache, "m", {"old": vector, "new": vector})
 
@@ -87,14 +72,14 @@ def test_prune_drops_vectors_whose_article_is_gone() -> None:
     assert list(store.get_embeddings(cache, ["old", "new"], "m")) == ["new"]
 
 
-def test_recent_articles_are_oldest_first_and_windowed() -> None:
+def test_recent_articles_are_oldest_first_and_windowed(make_article: MakeArticle) -> None:
     cache, _ = open_db(Path("unused"), "cache", dry_run=True)
     store.add_articles(
         cache,
         [
-            _article("b", NOW),
-            _article("a", NOW - timedelta(hours=1)),
-            _article("too-old", NOW - timedelta(hours=30)),
+            make_article("b"),
+            make_article("a", published_at=NOW - timedelta(hours=1)),
+            make_article("too-old", published_at=NOW - timedelta(hours=30)),
         ],
     )
 
@@ -102,3 +87,17 @@ def test_recent_articles_are_oldest_first_and_windowed() -> None:
 
     assert [a.url_hash for a in got] == ["a", "b"]
     assert got[0].published_at == NOW - timedelta(hours=1)
+
+
+def test_recent_articles_window_is_right_whatever_the_callers_timezone(
+    make_article: MakeArticle,
+) -> None:
+    cache, _ = open_db(Path("unused"), "cache", dry_run=True)
+    store.add_articles(cache, [make_article("a", published_at=NOW - timedelta(hours=2))])
+    ist = timezone(timedelta(hours=5, minutes=30))
+
+    # Three hours ago, given in IST ("14:30+05:30"). Compared as text with the stored UTC
+    # "10:00+00:00" it would sort after the article and drop it.
+    got = store.recent_articles(cache, since=(NOW - timedelta(hours=3)).astimezone(ist))
+
+    assert [a.url_hash for a in got] == ["a"]

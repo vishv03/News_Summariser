@@ -1,48 +1,34 @@
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
+from conftest import NOW, MakeArticle
 from pydantic import ValidationError
 
-from news_summariser.models import Article, Story
-
-NOW = datetime(2026, 10, 31, 12, tzinfo=UTC)
+from news_summariser.models import Story
 
 
-def _article(url_hash: str, source_id: str, published_at: datetime) -> Article:
-    return Article(
-        url_hash=url_hash,
-        source_id=source_id,
-        url=f"https://example.com/{url_hash}",
-        title="Title",
-        summary="Summary",
-        language="en",
-        published_at=published_at,
-        fetched_at=published_at,
-    )
+def test_story_id_is_earliest_article_whatever_the_order(make_article: MakeArticle) -> None:
+    early = make_article("early", published_at=NOW - timedelta(hours=2))
+    late = make_article("late", source_id="fox")
+
+    assert Story(articles=(late, early)).story_id == "early"
+    assert Story(articles=(early, late)).story_id == "early"
 
 
-def test_story_id_is_earliest_article_whatever_the_order() -> None:
-    early = _article("early", "bbc", NOW - timedelta(hours=2))
-    late = _article("late", "fox", NOW)
+def test_story_id_tie_breaks_on_url_hash(make_article: MakeArticle) -> None:
+    a = make_article("aaa")
+    b = make_article("bbb", source_id="fox")
 
-    assert Story(articles=[late, early]).story_id == "early"
-    assert Story(articles=[early, late]).story_id == "early"
-
-
-def test_story_id_tie_breaks_on_url_hash() -> None:
-    a = _article("aaa", "bbc", NOW)
-    b = _article("bbb", "fox", NOW)
-
-    assert Story(articles=[b, a]).story_id == "aaa"
+    assert Story(articles=(b, a)).story_id == "aaa"
 
 
-def test_story_derived_properties() -> None:
+def test_story_derived_properties(make_article: MakeArticle) -> None:
     story = Story(
-        articles=[
-            _article("1", "bbc", NOW - timedelta(hours=3)),
-            _article("2", "bbc", NOW - timedelta(hours=1)),
-            _article("3", "lemonde", NOW),
-        ]
+        articles=(
+            make_article("1", published_at=NOW - timedelta(hours=3)),
+            make_article("2", published_at=NOW - timedelta(hours=1)),
+            make_article("3", source_id="lemonde"),
+        )
     )
 
     assert story.source_ids == {"bbc", "lemonde"}
@@ -52,4 +38,13 @@ def test_story_derived_properties() -> None:
 
 def test_empty_story_is_rejected() -> None:
     with pytest.raises(ValidationError):
-        Story(articles=[])
+        Story(articles=())
+
+
+def test_story_cannot_be_changed_after_it_is_built(make_article: MakeArticle) -> None:
+    story = Story(articles=(make_article("a"),))
+
+    # Emptying a story would make story_id fail; code that narrows one must build a new Story.
+    with pytest.raises(ValidationError):
+        story.articles = ()
+    assert not hasattr(story.articles, "remove")
