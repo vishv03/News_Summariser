@@ -8,7 +8,7 @@ Ingest keeps about 1–3k articles from the last 48 hours, from 38 outlets in 9 
 framing, articles about the same event have to be grouped, across languages, before any paid
 translation. Clustering runs on CPU-only GitHub Actions runners, every 20 minutes for breaking news
 and daily for the digest. It must cost $0 and keep outlets' text and anything derived from it out of
-the public repo. The clustering logic itself (`cluster.py`) is owner-written; this ADR fixes the
+the public repo. Every choice in the clustering logic (`cluster.py`) is the owner's; this ADR fixes the
 tools, storage and interface around it.
 
 ## Options considered
@@ -95,7 +95,7 @@ tools, storage and interface around it.
   only a few dozen new articles. On Windows PyPI already serves the CPU build; the pin makes local
   and Actions installs match.
 - **Clustering:** scikit-learn `AgglomerativeClustering` with cosine distance, average linkage and a
-  distance threshold, written by the project owner in `cluster.py`.
+  distance threshold, in `cluster.py`, with every choice in it made by the project owner.
 - **Storage:** embeddings live in `cache.db` (migration `0002`), keyed by `url_hash`, with a `model`
   column, and are pruned with the articles at 48 hours.
 - **Input text:** title + summary, joined, with the model cutting at 128 tokens.

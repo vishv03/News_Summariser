@@ -35,14 +35,16 @@ likely cause in plain words, suggest a fix, and wait for me. Don't try fixes on 
 - One-line docstrings on public functions only. Comments explain *why*, not *what*
   (e.g. why a threshold has a given value).
 
-## Ownership: I write these, Claude never edits them
-The core logic is mine. This covers the modules that do it, whatever they're named:
+## Ownership: I decide these, Claude writes them
+I'm the architect for the core logic. This covers the modules that do it, whatever they're named:
 - Story clustering: grouping articles into stories (currently `src/news_summariser/cluster.py`)
 - Story selection: ranking, topic rotation, blindspot rules (currently `src/news_summariser/select.py`)
 - The lean-judging rubric (currently `prompts/judge.md`)
 
-For bugs or improvements in these, show me a diff in chat with the reason. I apply it myself.
-If you rename or move one of these files, update this section in the same change.
+Every choice in these (thresholds, formulas, rules, rubric wording) is mine. Ask me one question at
+a time with options, then write exactly what I decided. Never change their behaviour without asking,
+even for a bug fix: explain it and wait. If you rename or move one of these files, update this
+section in the same change.
 
 ## Needs my approval before any change
 - `config/sources.yaml` (outlets and baseline leans) and everything in `prompts/`.
