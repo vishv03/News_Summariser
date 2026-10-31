@@ -12,3 +12,4 @@ New ADRs start from [template.md](template.md) and take the next number.
 | [0005](0005-ingest-store-and-feed-health.md) | Ingest, store and feed health: httpx + feedparser, pydantic config, sqlite3 with numbered migrations | Accepted |
 | [0006](0006-clustering-embeddings-and-stories.md) | Clustering: multilingual embeddings (CPU-only PyTorch), agglomerative clustering, embeddings in cache.db, Story model | Accepted |
 | [0007](0007-posted-stories-in-state-db.md) | Posted stories: two tables in state.db, written after a successful send, read by selection | Accepted |
+| [0008](0008-judge-summary-and-budget.md) | Judge, summary and budget: anthropic SDK, rubric structure, spend log in state.db | Accepted |

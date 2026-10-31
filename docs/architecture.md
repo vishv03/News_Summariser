@@ -94,11 +94,25 @@ browser-like one but accepted the honest one.
 - Each `Story` has a `story_id` (its earliest article's `url_hash`), its articles, and derived
   properties. Region and lean are looked up from `sources.yaml`, never copied.
 
-## Lean judging *(planned)*
-The AI judges all articles in a story together, using a fixed rubric: lean score (-2..+2),
-framing tags, loaded words and confidence. It sees each outlet's baseline and must explain any
-shift of ±1 or more. Output is structured JSON, checked with pydantic. Only articles in stories
-that make the digest are judged (~60–80/day), which keeps cost low.
+## Lean judging *(planned, [ADR 0008](adr/0008-judge-summary-and-budget.md))*
+Haiku judges all articles in a story together, in one call, using a fixed rubric
+(`prompts/judge.md`). It sees each outlet's baseline and must explain any shift of ±1 or more.
+Output is structured JSON, checked with pydantic. Only articles in stories that make the digest
+are judged (~60–80/day), which keeps cost low. Every rubric choice is the project owner's.
+- **Lean:** -2..+2 on the outlet's own axis (us, uk, national or local), the same as its baseline.
+  When the text shows no clear slant the judge answers "insufficient", and the digest shows the
+  outlet's baseline, labelled as baseline.
+- **Framing tags:** 1–3 per article from a fixed list (conflict, human_cost, economic, security,
+  responsibility, morality, legal, political_strategy, sovereignty, evidence), most prominent
+  first, or `other:<word>`.
+- **Loaded words:** at most 3 per article, each quoted exactly with a neutral alternative. Words
+  inside direct quotes aren't flagged.
+- **Confidence:** low, medium or high.
+- **Translation:** the judge reads the original language and writes in English; non-English loaded
+  words are quoted in the original with an English gloss.
+
+Sonnet then writes each story's framing comparison from the judge's output only, not the article
+text, at low effort, to stay inside the budget.
 
 ## Story selection
 Every rule here is the project owner's; the reasons are in comments in `selection.py`.
@@ -154,8 +168,12 @@ Messages use HTML formatting and stay under Telegram's 4,096-character limit.
   IDs, because Actions logs are public.
 
 ## Cost
-- AI budget is $4/month, tracked by `budget.py`. When it's hit, the bot sends a headline-only
-  digest and logs a warning.
+- AI budget is $4/month, tracked by `budget.py` ([ADR 0008](adr/0008-judge-summary-and-budget.md)).
+  Each API call adds a row to a `spend` table in `state.db`: model, purpose, token counts and cost,
+  from a price table in `config/settings.yaml`.
+- Before a run's first paid call, month-to-date spend plus an estimate of the run (the most
+  expensive day of the last 7, or $0.25 with no history) is checked against the cap. If it would
+  pass, the whole digest is headline-only and a warning is logged.
 - A hard spend limit is also set in the Anthropic console as a second safety net.
 - Prices are taken from the official docs, never guessed.
 
