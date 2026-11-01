@@ -110,6 +110,47 @@ def test_bad_replies_degrade_the_story(
     assert store.spend_since(state, NOW) == pytest.approx(0.0009)
 
 
+def test_cut_off_reply_is_not_retried(
+    state: sqlite3.Connection, settings: Settings, story: Story, sources: dict[str, Source]
+) -> None:
+    result, client = _run([_message("{}", "max_tokens")], state, settings, story, sources)
+    assert result.not_judged == {"h0", "h1", "h2"}
+    assert len(client.messages.calls) == 1
+    assert store.spend_since(state, NOW) == pytest.approx(0.00045)
+
+
+@pytest.fixture
+def big_story(make_article: MakeArticle, sources: dict[str, Source]) -> Story:
+    ids = list(sources)
+    return Story(
+        articles=tuple(make_article(f"h{i}", source_id=ids[i % len(ids)]) for i in range(12))
+    )
+
+
+def test_big_story_is_judged_in_batches(
+    state: sqlite3.Connection, settings: Settings, big_story: Story, sources: dict[str, Source]
+) -> None:
+    first = [f"a{i}" for i in range(1, 11)]
+    result, client = _run([_good(*first), _good("a11", "a12")], state, settings, big_story, sources)
+    assert not result.not_judged
+    sent = [
+        [a["article_id"] for a in json.loads(c["messages"][0]["content"])["articles"]]
+        for c in client.messages.calls
+    ]
+    assert sent == [first, ["a11", "a12"]]
+
+
+def test_failed_batch_keeps_the_other_batches(
+    state: sqlite3.Connection, settings: Settings, big_story: Story, sources: dict[str, Source]
+) -> None:
+    replies: list[Message | Exception] = [_message("{}", "max_tokens"), _good("a11", "a12")]
+    result, client = _run(replies, state, settings, big_story, sources)
+    assert len(result.judgments) == 2
+    assert len(result.not_judged) == 10
+    assert result.facts == "Something happened."  # from the batch that worked
+    assert len(client.messages.calls) == 2
+
+
 def test_refusal_is_logged_but_not_retried(
     state: sqlite3.Connection, settings: Settings, story: Story, sources: dict[str, Source]
 ) -> None:

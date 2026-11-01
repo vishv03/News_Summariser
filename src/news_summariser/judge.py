@@ -20,8 +20,12 @@ log = logging.getLogger(__name__)
 JUDGE_PROMPT_PATH = Path("prompts/judge.md")
 
 # One retry for a bad or incomplete reply (ADR 0008). The SDK already retries 429s and 5xx itself,
-# and a refusal isn't retried: the same input would be refused again.
+# and a refusal or a cut-off reply isn't retried: the same input would fail the same way.
 ATTEMPTS = 2
+
+# A 35-article story ran past MAX_TOKENS twice and lost every judgment (2026-10-31). Ten articles
+# a call keeps each reply well inside the limit, and a failed batch costs only its own articles.
+BATCH_SIZE = 10
 
 # The API constrains the reply to the full schema; pydantic then checks each article on its own,
 # so one broken judgment doesn't throw away the rest (see ArticleJudgment for the rules).
@@ -82,19 +86,19 @@ def _parse(text: str, story_id: str) -> tuple[str, list[ArticleJudgment]] | None
     return reply.facts, judgments
 
 
-def judge_story(
+def _judge_batch(
     client: Anthropic,
     spend_conn: sqlite3.Connection,
     settings: Settings,
     prompt: str,
     story: Story,
+    ids: dict[str, str],
     sources: dict[str, Source],
     now: datetime,
     *,
-    dev: bool = False,
-) -> JudgedStory:
-    """Judge every article in one story; articles still unjudged after a retry are marked so."""
-    ids = _article_ids(story)
+    dev: bool,
+) -> tuple[str | None, dict[str, ArticleJudgment]]:
+    """One batch's facts line and judgments by url_hash, with one retry for gaps."""
     message = _user_message(story, ids, sources)
     judgments: dict[str, ArticleJudgment] = {}
     facts: str | None = None
@@ -119,10 +123,13 @@ def judge_story(
             # Already retried by the SDK; another try now is unlikely to do better.
             log.warning("judge call failed for story %s: %s", story.story_id, e)
             break
-        parsed = _parse(text, story.story_id) if text is not None else None
+        if text is None:
+            # Cut off at MAX_TOKENS: the same input would be cut off again.
+            break
+        parsed = _parse(text, story.story_id)
         if parsed is not None:
             # A retry fills gaps only: the first good answer per article (and for the facts) is
-            # kept, and ids the judge invented are dropped.
+            # kept, and ids the judge invented, or from another batch, are dropped.
             facts = facts or parsed[0]
             for j in parsed[1]:
                 url_hash = ids.get(j.article_id)
@@ -130,6 +137,34 @@ def judge_story(
                     judgments[url_hash] = j
         if len(judgments) == len(ids):
             break
+    return facts, judgments
+
+
+def judge_story(
+    client: Anthropic,
+    spend_conn: sqlite3.Connection,
+    settings: Settings,
+    prompt: str,
+    story: Story,
+    sources: dict[str, Source],
+    now: datetime,
+    *,
+    dev: bool = False,
+) -> JudgedStory:
+    """Judge every article in one story; articles still unjudged after a retry are marked so."""
+    ids = _article_ids(story)
+    judgments: dict[str, ArticleJudgment] = {}
+    facts: str | None = None
+    items = list(ids.items())
+    for start in range(0, len(items), BATCH_SIZE):
+        # Ids keep their story-wide numbers (a11, a12, …), so no two batches share one.
+        batch = dict(items[start : start + BATCH_SIZE])
+        batch_facts, batch_judgments = _judge_batch(
+            client, spend_conn, settings, prompt, story, batch, sources, now, dev=dev
+        )
+        # The facts line comes from the first batch that wrote one.
+        facts = facts or batch_facts
+        judgments |= batch_judgments
     missing = frozenset(ids.values()) - judgments.keys()
     if missing:
         log.warning(

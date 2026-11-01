@@ -98,7 +98,8 @@ browser-like one but accepted the honest one.
   properties. Region and lean are looked up from `sources.yaml`, never copied.
 
 ## Lean judging *([ADR 0008](adr/0008-judge-summary-and-budget.md))*
-Haiku judges all articles in a story together, in one call, using a fixed rubric
+Haiku judges a story's articles together, up to 10 per call (bigger stories are split into
+batches, because a 35-article story once ran past the output limit), using a fixed rubric
 (`prompts/judge.md`). It sees each outlet's baseline and must explain any shift of ±1 or more.
 Output is structured JSON, checked with pydantic. Only articles in stories that make the digest
 are judged (~60–80/day), which keeps cost low. Every rubric choice is the project owner's.
@@ -114,14 +115,16 @@ are judged (~60–80/day), which keeps cost low. Every rubric choice is the proj
 - **Translation:** the judge reads the original language and writes in English; non-English loaded
   words are quoted in the original with an English gloss.
 
-The judge also writes a 2–3 sentence neutral account of what happened, once per story.
+The judge also writes a 2–3 sentence neutral account of what happened; the story keeps the first
+batch's account.
 
 Sonnet then writes each story's headline, one framing line per side with coverage and a "what
 differs" sentence (`prompts/summary.md`), from the judge's output only, not the article text, at
 low effort, to stay inside the budget.
 
-When a call fails, it is retried once. Articles the judge still misses show their outlet's
-baseline, labelled; a story the judge can't judge at all is headline-only. If Sonnet fails, the
+When a call returns bad or incomplete JSON, it is retried once; a reply cut off at the output
+limit, or refused, is not, since the same input would fail again. Articles the judge still misses
+show their outlet's baseline, labelled; a story the judge can't judge at all is headline-only. If Sonnet fails, the
 story shows the judge's fact line and takes instead.
 
 ## Story selection
