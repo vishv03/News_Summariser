@@ -72,12 +72,16 @@ def test_story_shows_framing_outlets_and_baseline(story: Story, sources: dict[st
 
     assert "📰 <b>Neutral headline</b>" in msg.text
     assert "🔵 <b>Left:</b> Left framing." in msg.text
-    # Insufficient and not judged both fall back to the outlet's baseline, labelled (ADR 0008).
-    assert "HuffPost −2 (baseline)" in msg.text
-    assert "The New York Times −1" in msg.text
-    assert "🏛 RT +2 (baseline)" in msg.text
-    assert "Also covering: BBC News 0 (baseline)" in msg.text
     assert "🔍 <b>What differs:</b> They differ." in msg.text
+    # Outlet scores sit in one collapsed block at the end, after the story itself.
+    story_part, block = msg.text.split("<blockquote expandable>")
+    assert "(baseline)" not in story_part
+    assert block.endswith("</blockquote>")
+    assert block.startswith("📋 <b>5 outlets</b>\n")
+    # Insufficient and not judged both fall back to the outlet's baseline, labelled (ADR 0008).
+    assert "🔵 HuffPost −2 (baseline) · The New York Times −1" in block
+    assert "🌍 🏛 RT +2 (baseline)" in block
+    assert "⚪ BBC News 0 (baseline)" in block
 
 
 def test_buttons_open_each_sides_strongest_article(
@@ -150,6 +154,27 @@ def test_headline_only_lists_outlet_titles(story: Story, sources: dict[str, Sour
 
     assert '<a href="https://example.com/r1">Fox title</a> (Fox News)' in msg.text
     assert "Left:" not in msg.text
+    assert "blockquote" not in msg.text
+
+
+def test_headline_only_shows_one_link_per_side(
+    make_article: MakeArticle, sources: dict[str, Source]
+) -> None:
+    # A story the judge couldn't handle must not turn into a wall of links (2026-11-01).
+    left = ["nyt", "huffpost"]
+    story = Story(
+        articles=tuple(
+            make_article(f"l{i}", source_id=left[i % len(left)], published_at=NOW - timedelta(i))
+            for i in range(30)
+        )
+        + (make_article("r1", source_id="foxnews"),)
+    )
+    msg = render_story(_pick(story), None, None, sources, _healthy(sources))
+
+    assert msg.text.count("<a href=") == 2
+    assert "· +29 more" in msg.text
+    # A side with one article gets no "+N more".
+    assert msg.text.endswith("(Fox News)")
 
 
 def test_blindspot_and_update_labels(story: Story, sources: dict[str, Source]) -> None:

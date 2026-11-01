@@ -1,7 +1,7 @@
 """Turn the day's picks into Telegram messages: HTML text plus link buttons (ADR 0009)."""
 
 import html
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import date
 
 from news_summariser.config import Source
@@ -77,6 +77,11 @@ def _strongest(
 
     # Ties go to the earliest article, then url_hash, so the same input always gives one answer.
     return min(articles, key=lambda a: (-strength(a), a.published_at, a.url_hash))
+
+
+def _earliest(articles: Sequence[Article]) -> Article:
+    """The first-published article; url_hash breaks ties so the answer is stable."""
+    return min(articles, key=lambda a: (a.published_at, a.url_hash))
 
 
 def _score_text(value: int) -> str:
@@ -188,7 +193,7 @@ def _story_text(
 ) -> str:
     story = pick.story
     groups = _group(story.articles, sources)
-    earliest = min(story.articles, key=lambda a: (a.published_at, a.url_hash))
+    earliest = _earliest(story.articles)
     lines: list[str] = []
 
     label = _label(pick, sources)
@@ -199,15 +204,20 @@ def _story_text(
 
     if judged is None or judged.facts is None:
         # Headline-only: the budget is spent, or the judge returned nothing (ADR 0008). Outlets'
-        # own titles and links, no AI text.
+        # own titles and links, no AI text. One link per side: a 35-article story listed in
+        # full was a wall of links (owner decision, 2026-11-01).
         lines.append(f"📰 <b>{_esc(_clip(earliest.title, clip))}</b>")
         for side in (*SIDES, None):
-            for a in groups.get(side, []):
-                icon = ICON[side] if side is not None else CENTRE_ICON
-                lines.append(
-                    f'{icon} <a href="{html.escape(a.url)}">{_esc(_clip(a.title, clip))}</a>'
-                    f" ({_esc(sources[a.source_id].name)})"
-                )
+            articles = groups.get(side)
+            if not articles:
+                continue
+            icon = ICON[side] if side is not None else CENTRE_ICON
+            a = strongest[side] if side is not None else _earliest(articles)
+            more = f" · +{len(articles) - 1} more" if len(articles) > 1 else ""
+            lines.append(
+                f'{icon} <a href="{html.escape(a.url)}">{_esc(_clip(a.title, clip))}</a>'
+                f" ({_esc(sources[a.source_id].name)}){more}"
+            )
         return "\n".join(lines)
 
     # Without a write-up, the headline is the earliest article's title (ADR 0008).
@@ -238,19 +248,32 @@ def _story_text(
                 framing = judgment.take if judgment is not None else None
         text = _esc(_clip(framing, clip)) if framing else "<i>no framing available</i>"
         lines.append(f"{ICON[side]} <b>{NAME[side]}:</b> {text}")
-        if with_outlets:
-            lines.append(f"<i>{_outlets_line(articles, judged, sources)}</i>")
-    if with_outlets and groups.get(None):
-        lines.append(
-            f"{CENTRE_ICON} <i>Also covering: {_outlets_line(groups[None], judged, sources)}</i>"
-        )
     if with_loaded:
         loaded = _loaded_line(strongest, judged, sources)
         if loaded:
             lines.append(loaded)
     if writeup is not None:
         lines.append(f"🔍 <b>What differs:</b> {_esc(_clip(writeup.differs, clip))}")
+    if with_outlets:
+        lines.append(_outlets_block(groups, judged, sources))
     return "\n".join(lines)
+
+
+def _outlets_block(
+    groups: Mapping[Side | None, list[Article]],
+    judged: JudgedStory | None,
+    sources: Mapping[str, Source],
+) -> str:
+    # Collapsed by default: every outlet's score stays one tap away without crowding the story
+    # (owner decision, 2026-11-01).
+    count = len({a.source_id for articles in groups.values() for a in articles})
+    lines = [f"📋 <b>{count} outlets</b>"]
+    for side in (*SIDES, None):
+        articles = groups.get(side)
+        if articles:
+            icon = ICON[side] if side is not None else CENTRE_ICON
+            lines.append(f"{icon} {_outlets_line(articles, judged, sources)}")
+    return "<blockquote expandable>" + "\n".join(lines) + "</blockquote>"
 
 
 def render_story(

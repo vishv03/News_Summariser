@@ -166,11 +166,12 @@ offline). Then each story is one message:
 2–3 sentence factual summary.
 
 🔵 Left: how left outlets framed it
-The Guardian −1 · HuffPost −2 (baseline)        ← each outlet's judged lean, or its baseline
 🔴 Right: …   🌍 International: …
-⚪ Also covering: BBC News 0
 ⚠ Loaded language: "regime" → government (Fox News) · …   ← at most one per side
 🔍 What differs: …
+▸ 📋 6 outlets                                  ← collapsed; tap to expand
+  🔵 The Guardian −1 · HuffPost −2 (baseline)   ← each outlet's judged lean, or its baseline
+  🔴 …   🌍 …   ⚪ BBC News 0
 
 [🔵 The Guardian] [🔴 Fox News] [🌍 Al Jazeera] [🗣 Le Monde (fr)]   ← link buttons
 ```
@@ -181,9 +182,12 @@ The Guardian −1 · HuffPost −2 (baseline)        ← each outlet's judged le
 - A side with no coverage shows "view unavailable (N feeds offline)" only when fewer than half of
   its feeds are healthy, the same rule selection uses for blindspots; otherwise it's left out.
 - 🏛 marks state media. If Sonnet fails, the judge's facts and takes are shown with no "what
-  differs" line. With the budget spent, stories show outlets' own titles and links only.
-- Messages use HTML and stay under Telegram's 4,096-character limit: outlet lines and the ⚠ line
-  are dropped first, then long text is shortened.
+  differs" line. With the budget spent, or when the judge returns nothing for a story, it shows
+  outlets' own titles only: one link per side (its button's article) plus "+N more".
+- The outlet list is a collapsed (expandable) blockquote, so every score is one tap away
+  without crowding the story.
+- Messages use HTML and stay under Telegram's 4,096-character limit: the outlet list and the ⚠
+  line are dropped first, then long text is shortened.
 
 ## Reliability
 - **Idempotent posting** ([ADR 0009](adr/0009-telegram-delivery-and-idempotent-posting.md)):
