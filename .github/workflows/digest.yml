@@ -1,4 +1,4 @@
-# Daily digest at 01:15 UTC (about 07:00 IST), and an ingest-only run every 3 hours so busy feeds
+# Daily digest at 01:15 UTC (about 07:00 IST) with backup runs until 04:05 UTC, and an ingest-only run every 3 hours so busy feeds
 # that list only their last few hours still reach the digest's 24-hour window (ADR 0004, 0009).
 # Every change here needs the project owner's approval (CLAUDE.md).
 name: digest
@@ -7,6 +7,11 @@ on:
   schedule:
     # GitHub often starts scheduled runs late; the digest posts as soon as it is ready.
     - cron: "15 1 * * *"
+    # Backups: GitHub sometimes drops scheduled runs outright (it dropped the first 01:15 digest,
+    # 2026-11-01). Once a day's digest is done, a later digest run exits before any paid call.
+    - cron: "45 1 * * *"
+    - cron: "30 2 * * *"
+    - cron: "5 4 * * *"
     # Ingest only. Minute 40 keeps it off the top of the hour, where GitHub's delays are worst.
     - cron: "40 */3 * * *"
   workflow_dispatch:
@@ -31,7 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      TASK: ${{ github.event_name == 'workflow_dispatch' && inputs.task || (github.event.schedule == '15 1 * * *' && 'digest' || 'ingest') }}
+      # Every schedule except the 3-hourly one is a digest run.
+      TASK: ${{ github.event_name == 'workflow_dispatch' && inputs.task || (github.event.schedule == '40 */3 * * *' && 'ingest' || 'digest') }}
       HF_HOME: ${{ github.workspace }}/.cache/huggingface
     steps:
       # Third-party actions are pinned to commit SHAs (owner decision, step 6): this job can

@@ -195,7 +195,8 @@ The Guardian −1 · HuffPost −2 (baseline)        ← each outlet's judged le
   never retried, because the message may have arrived. A rejected message skips that story; a
   removed bot or bad token stops the run. Any failure exits non-zero, so a re-run fills the gaps.
 - **Schedule** (`.github/workflows/digest.yml`): the digest at 01:15 UTC (about 07:00 IST), posted
-  as soon as it's ready, and ingest only every 3 hours, so busy feeds that list only a few hours
+  as soon as it's ready, with backup digest runs at 01:45, 02:30 and 04:05 UTC because GitHub
+  sometimes drops scheduled runs (a backup exits early once the day's digest is done), and ingest only every 3 hours, so busy feeds that list only a few hours
   of items still reach the 24-hour window. One `state-db` concurrency group; actions pinned to
   commit SHAs.
 - **State pruning:** rows older than 30 days are deleted so `state.db` stays small.
